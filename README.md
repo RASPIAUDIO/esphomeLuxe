@@ -30,7 +30,7 @@ This project is designed to enhance your experience with the **Raspiaudio Muse L
 If you want to use it in good conditions you will have to change one parameter in Music Assistant.
 1. Select your player's parameters (Raspiaudio Muse Luxe)
 2. Select Open Settings => Avanced settings => Output codec to use for streaming audio to the player
-3. Here choose .wav
+3. There choose .wav
 4. Save
 
 ### Source Code
