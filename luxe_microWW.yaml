@@ -2,6 +2,7 @@ substitutions:
   name: muse-luxe
   friendly_name: Raspiaudio Muse Luxe
 #States  
+  P_starting: "0"
   P_waiting: "1"
   P_playing: "2"
   P_listening: "3"
@@ -10,61 +11,44 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-  min_version: 2024.9.1
+  min_version: 2025.2.0
+  name_add_mac_suffix: false
   platformio_options:
     board_build.flash_mode: dio
     board_build.arduino.memory_type: qio_opi
   on_boot:
     priority: -100.0
     then:
-      - light.turn_on:
-          id: top_led
-          effect: slow_pulse
-          red: 100%
-          green: 60%
-          blue: 0%   
-      - if:
-         condition:
-             switch.is_on: use_wake_word
-         then:                     
-           - micro_wake_word.start:    
+      - lambda: id(phase) = 0;
+      - script.execute: update_led  
             
 external_components:
-  - source: github://RASPIAUDIO/esphomeLuxe@main
-    components: [es8388]
-    refresh: 0s
-  - source:
-      type: git
-      url: https://github.com/gnumpi/esphome_audio
-      ref: dev-next
-    components: [ adf_pipeline, i2s_audio ]
-    refresh: 0s  
+    - source: github://RASPIAUDIO/esphomeLuxe@main
+#    - source:
+#        type: local
+#        path: components
+      components: [es8388]
+      refresh: 0s
         
 esp32:
-  board: esp-wrover-kit
+  board: esp-wrover-kit  
   flash_size: 4MB
   framework:
     type: esp-idf
-    version: 4.4.8
-    platform_version: 5.4.0
+    version: recommended
     sdkconfig_options:
       CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
       CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
       CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
-  
-      
+       
 micro_wake_word:
   id: mww
   models:
-#    - model: okay_nabu
-#      id: okat_nabu
-    - model: hey_jarvis
-#      id: hey_jarvis
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
+#   - model: hey_jarvis
 #    - model: hey_mycroft
-#      id: hey_mycroft
 #    - model: alexa
-#      id: alexa  
-  vad:
+#  vad:
   microphone: luxe_mic
   on_wake_word_detected:        
     - voice_assistant.start:
@@ -76,6 +60,8 @@ ota:
 api:
 
 wifi:
+#  ssid: 
+#  password: 
   power_save_mode: none
   output_power: 15
   ap:
@@ -92,7 +78,8 @@ logger:
 ##########
 # Hardware Configuration
 es8388:
- 
+   id: my_es8388
+   
 psram:
   mode: octal
   speed: 80MHz
@@ -102,7 +89,7 @@ psram:
 i2c:
   sda: GPIO18
   scl: GPIO23
-  id: i2c_bus
+
 
 #####################
 # Internal Components
@@ -114,32 +101,20 @@ output:
       inverted: true
       mode:
         output: true
-       
+  
+              
 globals:
-
   - id: Vol
     type: float
-    initial_value: '0.3'    
+    initial_value: '0.6'    
   - id: phase
     type: int
-    initial_value: '1'    
+    initial_value: '0'    
   - id: mute  
     type: bool
     initial_value: 'false'        
         
-switch:
-  - platform: template
-    name: Use Wake Word
-    id: use_wake_word
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    on_turn_on:
-      - micro_wake_word.start:
-      - script.execute: reset_led
-    on_turn_off:
-      - micro_wake_word.stop:
-      - script.execute: reset_led             
-             
+
 
 
 sensor:
@@ -201,7 +176,8 @@ sensor:
             - 3.82 -> 1.7
             - 3.27 -> 0.0
       - lambda: return clamp(x, 0.0f, 100.0f);   
-      
+                  
+                   
 binary_sensor:
   - platform: gpio
     pin:
@@ -213,7 +189,7 @@ binary_sensor:
     name: Volume Up
     on_click:
         - lambda: |-       
-                id(Vol) += 0.02;
+                id(Vol) += 0.05;
                 if(id(Vol) > 1) id(Vol) = 1;            
         - media_player.volume_set: 
                 id: luxe_media_player        
@@ -229,7 +205,7 @@ binary_sensor:
     name: Volume Down
     on_click:
         - lambda: |-       
-                id(Vol) -= 0.02;
+                id(Vol) -= 0.05;
                 if(id(Vol) < 0) id(Vol) = 0;            
         - media_player.volume_set: 
                 id: luxe_media_player        
@@ -241,28 +217,24 @@ binary_sensor:
       inverted: true
       mode:
         input: true
-        pullup: true
-    name: Action
+        pullup: true 
+    name: Mute
     on_click:       
       - if:
           condition:
-            and:
-               - switch.is_off: use_wake_word
-               - lambda: 'return(id(phase) != 2);'            
+               - lambda: 'return(id(mute));'            
           then:
-            - if:
-                condition: voice_assistant.is_running
-                then:
-                  - voice_assistant.stop:
-                  - script.execute: reset_led
-                else:
-                  - voice_assistant.start:
-# STOP                                   
-      - if:
-         condition:
-            lambda: 'return(id(phase) == 2);'
-         then:        
-          - media_player.stop: 
+              - script.execute: mute_off
+              - lambda: id(mute) = false;
+          else:
+              - script.execute: mute_on
+              - lambda: id(mute) = true;  
+    on_double_click:
+       - if:
+           condition: 
+              - lambda: 'return(id(phase) == 2);'
+           then:
+              - media_player.stop:                     
 
 
 light:
@@ -270,10 +242,10 @@ light:
     name: None
     id: top_led
     pin: GPIO22
-    chipset: SK6812
+    chipset: WS2812
     num_leds: 1
     rgb_order: grb
-    rmt_channel: 0
+#    rmt_channel: 0
     default_transition_length: 0s
     gamma_correct: 2.8
     effects:
@@ -288,62 +260,42 @@ light:
 
     
 i2s_audio:
-  - id: i2s_shared
     i2s_lrclk_pin: GPIO25
     i2s_bclk_pin: GPIO5
     i2s_mclk_pin: GPIO0
-    access_mode: duplex 
-    
-  
+
 microphone:
-  - platform: adf_pipeline
-    id: luxe_mic
-    keep_pipeline_alive: true
-    pipeline:
-      - adf_i2s_in
-      - resampler
-      - self 
-      
-adf_pipeline:
   - platform: i2s_audio
-    type: audio_out
-    id: adf_i2s_out
-    i2s_audio_id: i2s_shared
+    id: luxe_mic
+    sample_rate: 16000
+    i2s_din_pin: GPIO35
+    bits_per_sample: 16bit
+    channel: left
+    adc_type: external  
+    
+speaker:
+  - platform: i2s_audio
+    id: luxe_speaker
     i2s_dout_pin: GPIO26
+    dac_type: external
     sample_rate: 48000
     bits_per_sample: 16bit
-    fixed_settings: false
-    
-  - platform: i2s_audio
-    type: audio_in
-    id: adf_i2s_in
-    pdm: false
-    i2s_audio_id: i2s_shared
-    i2s_din_pin: GPIO35
-    sample_rate: 24000 
-    fixed_settings: false     
+    channel: left
+    buffer_duration: 100ms     
     
 media_player:
-  - platform: adf_pipeline
+  - platform: speaker
+    name: None
     id: luxe_media_player
-    name: luxe_media_player
-    internal: false
-    keep_pipeline_alive: true
-    announcement_audio:
-      sample_rate: 24000
-      bits_per_sample: 16
-      num_channels: 1
-    pipeline:
-      - self
-      - resampler
-      - adf_i2s_out  
-    on_play: 
-    
-      - if:
-         condition:
-             switch.is_on: use_wake_word
-         then:                     
-           - micro_wake_word.stop:    
+#    volume_min: 0.5
+#    volume_max: 0.8
+    announcement_pipeline:
+      speaker: luxe_speaker
+      format: FLAC
+      sample_rate: 48000
+      num_channels: 1      
+    on_announcement: 
+      - micro_wake_word.stop:
       - if:
            condition:
                 lambda: 'return(id(phase) != 2);'
@@ -351,52 +303,42 @@ media_player:
               - lambda: |-
                    if(id(phase) == 1)  id(phase) = 2;    
               - script.execute: mute_off         
-              - script.execute: reset_led    
-              
+              - script.execute: update_led    
+                     
     on_idle:
+      - wait_until:
+         and:
+          - not:
+              media_player.is_announcing:
+          - not:
+              voice_assistant.is_running:    
       - if:
           condition:              
               lambda: 'return((id(phase) == 4) || (id(phase) == 2));'
           then:
             - lambda: |-
                  id(phase) = 1; 
-      - if:
-         condition:
-             switch.is_on: use_wake_word
-         then:                     
-           - micro_wake_word.start:                                                
-      - script.execute: reset_led     
+      - micro_wake_word.start:                                                
+      - script.execute: update_led     
       
-                      
 
-  
-                                 
-                
 voice_assistant:
-    id: va
-    microphone: luxe_mic
-    media_player: luxe_media_player
-    use_wake_word: false         
-      
-    on_listening:
-     - light.turn_on:
-        id: top_led
-        blue: 100%
-        red: 0%
-        green: 0%
-        brightness: 100%
-        effect: pulse  
-        
-     - if:
-         condition:
-             switch.is_off: use_wake_word
-         then:                        
-           - micro_wake_word.stop:
+  id: va
+  microphone: luxe_mic
+  media_player: luxe_media_player
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  
+  on_listening: 
+     - logger.log: "listening 3 => phase"                    
+     - micro_wake_word.stop:
      - lambda: |-
-        id(phase) = 3;                      
-#     - script.execute: reset_led
-       
-    on_stt_end:
+        id(phase) = 3;                            
+     - script.execute: update_led
+
+  on_stt_end:
      - media_player.play_media: !lambda return x;
      - light.turn_on:
         id: top_led
@@ -404,54 +346,97 @@ voice_assistant:
         red: 20%
         green: 20%
         effect: pulse
-#     - script.execute: reset_led
-     
-    on_tts_start:
-     - light.turn_on:
-        id: top_led
-        blue: 60%
-        red: 20%
-        green: 20%
-        effect: none                    
+      
+
+  on_tts_start:
+     - logger.log: "answering  4 => phase"                   
      - lambda: |-
         id(phase) = 4;
-#     - script.execute: reset_led
-         
-    on_error:
-     - light.turn_on:
+     - script.execute: update_led
+                     
+  on_error:
+    - logger.log: "ERROR!!!!!!!!!!!!!!!!"  
+    - light.turn_on:
         id: top_led
         blue: 0%
         red: 100%
         green: 0%
-        effect: none
-     - delay: 1s
-     - script.execute: reset_led
-     - script.wait: reset_led
-     - lambda: |-
-        if (code == "wake-provider-missing" || code == "wake-engine-missing") {
-          id(use_wake_word).turn_off();
-        }
+        effect: pulse          
+    - delay: 3s
+    - lambda: id(phase) = 1;    
+    - script.execute: update_led 
+  
 
 #########
 # Scripts
 
-script:         
-  - id: reset_led
+script:   
+  - id: update_led
+    then:  
+       - logger.log: "==>>>update_led" 
+       - lambda: |-
+             if(id(phase) == 0)id(start).execute();
+             if(id(phase) == 1)id(waiting).execute();  
+             if(id(phase) == 2)id(external_player).execute();                      
+             if(id(phase) == 3)id(listening).execute();
+             if(id(phase) == 4)id(answering).execute();
+                         
+  - id: start           
     then:
-      - if:
-          condition:
-            switch.is_on: use_wake_word
-          then:
-            - light.turn_on:
-                id: top_led
-                blue: 100%
-                red: 100%
-                green: 0%
-                brightness: 100%
-                effect: none
-          else:
-            - light.turn_off: top_led   
-            
+     - light.turn_on:
+          id: top_led
+          effect: slow_pulse
+          red: 80%
+          green: 0%
+          blue: 80%             
+     - delay: 5sec
+     - lambda: id(my_es8388).setup();
+     - output.turn_off: dac_mute
+     - lambda: id(phase) = 1;
+     - script.execute: update_led
+     
+  - id: waiting
+    then:
+     - light.turn_on:
+          id: top_led
+          effect: pulse
+          red: 0%
+          green: 0%
+          blue: 100% 
+          brightness: 100% 
+     - voice_assistant.stop:              
+     - micro_wake_word.start:                       
+       
+
+  - id: listening
+    then:
+     - light.turn_on:
+          id: top_led
+          effect: pulse
+          red: 0%
+          green: 100%
+          blue: 0%                      
+          brightness: 100%       
+          
+  - id: answering
+    then:
+     - light.turn_on:
+          id: top_led
+          effect: none
+          red: 100%
+          green: 100%
+          blue: 0%                     
+          brightness: 100%       
+          
+  - id: external_player
+    then:
+     - light.turn_on:
+          id: top_led
+          effect: none
+          red: 80%
+          green: 40%
+          blue: 0%                      
+             
   - id: mute_on
     then:
        - media_player.volume_set:
