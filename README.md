@@ -4,9 +4,9 @@
 
 Welcome to the Raspiaudio Muse Luxe Voice Satellite project! This guide will help you get started with your device, including setup instructions, source code information, and support options.
 
-## Introducing the New Version: MicroWWPlus
+## Introducing the New Version: luxe_microWW (with esphome 2025.2.2)
 
-Discover the enhancements in the latest release of MicroWWPlus!
+Discover the enhancements in the latest release!
 
 ### New Features:
 
@@ -25,6 +25,13 @@ This project is designed to enhance your experience with the **Raspiaudio Muse L
    - **SSID**: Raspiaudio-Luxe
    - **Password**: 12345678
 5. Access `192.168.4.1` in your browser to configure your home Wi-Fi settings.
+   
+### Music Assistant
+If you want to use it in good conditions you will have to change one parameter in Music Assistant.
+1. Select your player's parameters (Raspiaudio Muse Luxe)
+2. Select Open Settings => Avanced settings => Output codec to use for streaming audio to the player
+3. Here choose .wav
+4. Save
 
 ### Source Code
 
