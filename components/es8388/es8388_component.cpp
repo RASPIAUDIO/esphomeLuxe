@@ -44,7 +44,7 @@ void ES8388Component::setup() {
 
  
  //mono (L+R)/2
-    this->write_byte(29, 0x20);
+//    this->write_byte(29, 0x20);
  // ADC poweroff
    this->write_byte(3,0xFF);
    // ADC micboost 24 dB
@@ -91,7 +91,7 @@ void ES8388Component::setup() {
   this->write_byte(0x2E, 0x21);
   this->write_byte(0x2F, 0x21);
 
-    //fully differential output Right -L2/R2
+  //fully differential output Right -L2/R2
   this->write_byte(0x30, 0x21);
   this->write_byte(0x31, 0x21);
 

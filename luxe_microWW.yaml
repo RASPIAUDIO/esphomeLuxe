@@ -280,7 +280,7 @@ speaker:
     dac_type: external
     sample_rate: 48000
     bits_per_sample: 16bit
-    channel: left
+    channel: stereo
     buffer_duration: 100ms     
     
 media_player:
