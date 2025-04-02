@@ -293,7 +293,7 @@ media_player:
       speaker: luxe_speaker
       format: FLAC
       sample_rate: 48000
-      num_channels: 1      
+      num_channels: 2      
     on_announcement: 
       - micro_wake_word.stop:
       - if:
