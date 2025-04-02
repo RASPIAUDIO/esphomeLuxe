@@ -16,6 +16,9 @@ esphome:
   platformio_options:
     board_build.flash_mode: dio
     board_build.arduino.memory_type: qio_opi
+  project:
+    name: raspiaudio.luxeVoice-assistant
+    version: "2025.2.2"    
   on_boot:
     priority: -100.0
     then:
@@ -53,10 +56,20 @@ micro_wake_word:
   on_wake_word_detected:        
     - voice_assistant.start:
         wake_word: !lambda return wake_word;       
-               
-ota:
-  platform: esphome
-  
+
+ota:                 
+  - platform: esphome
+    id: ota_esphome
+  - platform: http_request
+    id: ota_http_request
+   
+update:
+  - platform: http_request
+    id: update_http_request
+    name: Firmware
+    source: https://raw.githubusercontent.com/RASPIAUDIO/esphomeLuxe/main/manifest_update.json     
+http_request:  
+    
 api:
 
 wifi:
@@ -101,8 +114,7 @@ output:
       inverted: true
       mode:
         output: true
-  
-              
+                
 globals:
   - id: Vol
     type: float
@@ -114,9 +126,6 @@ globals:
     type: bool
     initial_value: 'false'        
         
-
-
-
 sensor:
   - platform: adc
     pin: GPIO33
