@@ -16,9 +16,6 @@ esphome:
   platformio_options:
     board_build.flash_mode: dio
     board_build.arduino.memory_type: qio_opi
-  project:
-    name: raspiaudio.luxeVoice-assistant
-    version: "2025.2.2"    
   on_boot:
     priority: -100.0
     then:
@@ -56,20 +53,10 @@ micro_wake_word:
   on_wake_word_detected:        
     - voice_assistant.start:
         wake_word: !lambda return wake_word;       
-
-ota:                 
-  - platform: esphome
-    id: ota_esphome
-  - platform: http_request
-    id: ota_http_request
-   
-update:
-  - platform: http_request
-    id: update_http_request
-    name: Firmware
-    source: https://raw.githubusercontent.com/RASPIAUDIO/esphomeLuxe/main/manifest_update.json     
-http_request:  
-    
+               
+ota:
+  platform: esphome
+  
 api:
 
 wifi:
@@ -83,7 +70,7 @@ wifi:
 
 captive_portal:
                 
-#improv_serial: 
+improv_serial: 
 
 logger:
    level: DEBUG
@@ -93,9 +80,9 @@ logger:
 es8388:
    id: my_es8388
    
-psram:
-  mode: octal
-  speed: 80MHz
+#psram:
+#  mode: octal
+#  speed: 80MHz
 
 #######
 # Buses Configuration
@@ -114,7 +101,8 @@ output:
       inverted: true
       mode:
         output: true
-                
+  
+              
 globals:
   - id: Vol
     type: float
@@ -126,6 +114,9 @@ globals:
     type: bool
     initial_value: 'false'        
         
+
+
+
 sensor:
   - platform: adc
     pin: GPIO33
@@ -289,7 +280,7 @@ speaker:
     dac_type: external
     sample_rate: 48000
     bits_per_sample: 16bit
-    channel: stereo
+    channel: left
     buffer_duration: 100ms     
     
 media_player:
@@ -302,7 +293,10 @@ media_player:
       speaker: luxe_speaker
       format: FLAC
       sample_rate: 48000
-      num_channels: 2      
+      num_channels: 1   
+    files:
+      - id: little_sound
+        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac             
     on_announcement: 
       - micro_wake_word.stop:
       - if:
@@ -402,6 +396,9 @@ script:
      - lambda: id(my_es8388).setup();
      - output.turn_off: dac_mute
      - lambda: id(phase) = 1;
+     - media_player.speaker.play_on_device_media_file:
+          media_file: little_sound
+          announcement: true        
      - script.execute: update_led
      
   - id: waiting
