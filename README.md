@@ -4,7 +4,7 @@
 
 Welcome to the Raspiaudio Muse Luxe Voice Satellite project! This guide will help you get started with your device, including setup instructions, source code information, and support options.
 
-## Introducing the New Version: luxe_microWW (with esphome 2025.2.2)
+## Introducing the New Version: luxe_microWW (with esphome 2025.4.0)
 
 Discover the enhancements in the latest release!
 
