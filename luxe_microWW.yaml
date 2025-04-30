@@ -280,7 +280,7 @@ speaker:
     dac_type: external
     sample_rate: 48000
     bits_per_sample: 16bit
-    channel: left
+    channel: stereo
     buffer_duration: 100ms     
     
 media_player:
@@ -293,7 +293,7 @@ media_player:
       speaker: luxe_speaker
       format: FLAC
       sample_rate: 48000
-      num_channels: 1   
+      num_channels: 2   
     files:
       - id: little_sound
         file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac             
