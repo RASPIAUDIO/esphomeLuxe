@@ -8,23 +8,37 @@ Welcome to the Raspiaudio Muse Luxe Voice Satellite project! This guide will hel
 
 Discover the enhancements in the latest release!
 
-### New Features:
+### Features:
 
-- **Micro Wake Words**: Now supports multiple wake words like "Hey Jarvis". Customize it further by modifying the YAML configuration.
-
-## ESPHome for Raspiaudio Muse Luxe
-
-This project is designed to enhance your experience with the **Raspiaudio Muse Luxe**. Follow the instructions below to get started.
+- **Micro Wake Words**: Now supports multiple wake words like "okay_nabu".
+- **Full interface with Home Assistant Assist**
+- **MP3/AAC player**: Media Browser, My media,...
 
 ### Flashing Your Device
 
 1. Open **Google Chrome**.
 2. Navigate to [apps.raspiaudio.com](https://apps.raspiaudio.com).
-3. Choose **Muse Luxe - Home Assistant** and follow the on-screen instructions.
-4. Connect to the device's access point with these credentials:
+3. Choose **Muse Luxe - Home Assistant** and follow the on-screen instructions for flashing and initialize your WiFi credentials
+
+  **an alternative method** for Wifi init is available
+  1. Connect to the device's access point with these credentials:
    - **SSID**: Raspiaudio-Luxe
    - **Password**: 12345678
-5. Access `192.168.4.1` in your browser to configure your home Wi-Fi settings.
+   2. Access `192.168.4.1` in your browser to configure your home Wi-Fi settings.
+### Interface
+**Led**
+1. Blue => waiting Wake Word
+2. Green => Listening
+3. Yellow => Answering
+4. Orange => External player
+   
+**Buttons**
+1. Plus => volume up
+2. Minus => volume down
+3. Center
+- click => mute/unmute
+- double click => stop external player
+     
    
 ### Music Assistant
 If you want to use it in good conditions you will have to change one parameter in Music Assistant.
@@ -32,6 +46,7 @@ If you want to use it in good conditions you will have to change one parameter i
 2. Select Open Settings => Avanced settings => Output codec to use for streaming audio to the player
 3. There choose .wav
 4. Save
+
 
 ### Source Code
 
