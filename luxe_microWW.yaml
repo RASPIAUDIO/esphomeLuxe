@@ -80,9 +80,9 @@ logger:
 es8388:
    id: my_es8388
    
-#psram:
-#  mode: octal
-#  speed: 80MHz
+psram:
+  mode: quad
+  speed: 80MHz
 
 #######
 # Buses Configuration
