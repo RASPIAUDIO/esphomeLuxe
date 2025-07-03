@@ -270,7 +270,7 @@ microphone:
     sample_rate: 16000
     i2s_din_pin: GPIO35
     bits_per_sample: 16bit
-    channel: left
+    channel: stereo
     adc_type: external  
     
 speaker:
