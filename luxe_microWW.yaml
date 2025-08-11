@@ -113,9 +113,38 @@ globals:
   - id: mute  
     type: bool
     initial_value: 'false'        
+  - id: muteH 
+    type: bool
+    initial_value: 'false'     
         
-
-
+interval:
+  - interval: 0.1sec   
+    then:          
+      - if:
+          condition:  
+             - speaker.is_stopped:             
+          then:
+             - if:
+                condition:
+                  - not:
+                     - lambda: 'return(id(muteH));'            
+                then:
+                  - output.turn_on: dac_mute   
+                  - lambda: id(muteH) = true;
+                  - logger.log: "====> hardware mute"     
+          
+      - if:
+          condition:  
+             - speaker.is_playing:             
+          then:
+             - if:
+                condition:
+                  - lambda: 'return(id(muteH));'            
+                then:
+                  - output.turn_off: dac_mute   
+                  - lambda: id(muteH) = false;          
+                  - logger.log: "====> hardware unmute"               
+          
 
 sensor:
   - platform: adc
@@ -321,7 +350,7 @@ media_player:
           then:
             - lambda: |-
                  id(phase) = 1; 
-      - micro_wake_word.start:                                                
+      - micro_wake_word.start:                                              
       - script.execute: update_led     
       
 
@@ -442,20 +471,21 @@ script:
           red: 80%
           green: 40%
           blue: 0%                      
-             
+                      
+                        
   - id: mute_on
     then:
+ 
        - media_player.volume_set:
-            volume: '0'
+           volume: '0'
        - lambda: id(mute) = true;
-       
+     
   - id: mute_off
     then:
+
        - media_player.volume_set:
             volume: !lambda return(id(Vol));
-       - lambda: id(mute) = false;             
-            
-            
+       - lambda: id(mute) = false;               
             
       
       
