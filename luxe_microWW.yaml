@@ -16,6 +16,9 @@ esphome:
   platformio_options:
     board_build.flash_mode: dio
     board_build.arduino.memory_type: qio_opi
+  project:
+    name: raspiaudio.voice-assistant
+    version: "2025.2.5"    
   on_boot:
     priority: -100.0
     then:
@@ -24,9 +27,6 @@ esphome:
             
 external_components:
     - source: github://RASPIAUDIO/esphomeLuxe@main
-#    - source:
-#        type: local
-#        path: components
       components: [es8388]
       refresh: 0s
         
@@ -73,7 +73,7 @@ captive_portal:
 improv_serial: 
 
 logger:
-   level: DEBUG
+   level: NONE
 
 ##########
 # Hardware Configuration
@@ -289,6 +289,7 @@ light:
 
     
 i2s_audio:
+    id: i2s0
     i2s_lrclk_pin: GPIO25
     i2s_bclk_pin: GPIO5
     i2s_mclk_pin: GPIO0
@@ -296,6 +297,7 @@ i2s_audio:
 microphone:
   - platform: i2s_audio
     id: luxe_mic
+    i2s_audio_id: i2s0
     sample_rate: 16000
     i2s_din_pin: GPIO35
     bits_per_sample: 16bit
@@ -305,27 +307,30 @@ microphone:
 speaker:
   - platform: i2s_audio
     id: luxe_speaker
+    i2s_audio_id: i2s0
     i2s_dout_pin: GPIO26
     dac_type: external
     sample_rate: 48000
     bits_per_sample: 16bit
-    channel: stereo
+    num_channels: 2
     buffer_duration: 100ms     
     
 media_player:
   - platform: speaker
     name: None
     id: luxe_media_player
+    internal: false   
+#    task_stack_in_psram: true
 #    volume_min: 0.5
 #    volume_max: 0.8
     announcement_pipeline:
       speaker: luxe_speaker
       format: FLAC
       sample_rate: 48000
-      num_channels: 2   
+      num_channels: 1       
     files:
       - id: little_sound
-        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac             
+        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac                
     on_announcement: 
       - micro_wake_word.stop:
       - if:
@@ -382,6 +387,7 @@ voice_assistant:
 
   on_tts_start:
      - logger.log: "answering  4 => phase"                   
+     - micro_wake_word.stop:
      - lambda: |-
         id(phase) = 4;
      - script.execute: update_led
@@ -427,7 +433,7 @@ script:
      - lambda: id(phase) = 1;
      - media_player.speaker.play_on_device_media_file:
           media_file: little_sound
-          announcement: true        
+          announcement: false      
      - script.execute: update_led
      
   - id: waiting

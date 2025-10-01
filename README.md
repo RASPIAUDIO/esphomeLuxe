@@ -61,3 +61,14 @@ Join our community for discussions and support: [Raspiaudio Forum Thread](https:
 For a comprehensive walkthrough, watch our [Step-by-Step Video Guide](https://youtu.be/QDDjXAWuk0E).
 
 We hope you enjoy using your Raspiaudio Muse Luxe Voice Satellite! For any further assistance, feel free to reach out via the forum.
+
+
+
+
+/////////////////////////////////////////////////////////////////////////////////
+// reminder UPDATE
+/////////////////////////////////////////////////////////////////////////////////
+(First Change the project version in the yaml file)
+1. .bin ..../.esphome/build/raspiaudio-radio/.pioenvs/raspiaudio-radio/firmware.ota.bin ===> update_firmware.bin
+2. calcul parité ==> >> md5sum update_firmware.bin
+3. modifier avec le résultat la ligne "md5": de manifest_update.json
