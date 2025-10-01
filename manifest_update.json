@@ -5,7 +5,7 @@
     {
       "chipFamily": "ESP32",
       "ota": {
-         "md5": "d8c6b7011040a5acb3e0b01767013224",  
+         "md5": "9cd9cb7116b91e1e4657e449d2d04f21",  
          "path": "https://raw.githubusercontent.com/RASPIAUDIO/esphomeLuxe/main/update_firmware.bin",
          "offset": 0,
          "summary": "Latest firmware"
