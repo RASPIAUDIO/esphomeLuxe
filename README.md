@@ -64,11 +64,16 @@ We hope you enjoy using your Raspiaudio Muse Luxe Voice Satellite! For any furth
 
 
 
+## Firmware Update Procedure
 
-/////////////////////////////////////////////////////////////////////////////////
-// reminder UPDATE
-/////////////////////////////////////////////////////////////////////////////////
-(First Change the project version in the yaml file)
-1. .bin ..../.esphome/build/raspiaudio-radio/.pioenvs/raspiaudio-radio/firmware.ota.bin ===> update_firmware.bin
-2. calcul parité ==> >> md5sum update_firmware.bin
-3. modifier avec le résultat la ligne "md5": de manifest_update.json
+1. Change the project version in the `.yaml` file.
+
+2. Build the firmware. Locate:
+   .esphome/build/raspiaudio-radio/.pioenvs/raspiaudio-radio/firmware.ota.bin
+   Rename it to:
+   update_firmware.bin
+
+3. Compute checksum:
+   md5sum update_firmware.bin
+
+4. Edit manifest_update.json and replace the "md5" value with the result from step 3.
