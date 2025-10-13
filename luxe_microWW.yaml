@@ -18,7 +18,7 @@ esphome:
     board_build.arduino.memory_type: qio_opi
   project:
     name: raspiaudio.voice-assistant
-    version: "2025.2.5"    
+    version: "2025.2.6"    
   on_boot:
     priority: -100.0
     then:
@@ -222,6 +222,19 @@ sensor:
 binary_sensor:
   - platform: gpio
     pin:
+      number: GPIO27
+      mode:
+        input: true
+        pullup: true
+    id: jack_detect
+    name: Jack Detect
+    internal: true
+    on_press:
+      - script.execute: jack_detect_high
+    on_release:
+      - script.execute: jack_detect_low
+  - platform: gpio
+    pin:
       number: GPIO19
       inverted: true
       mode:
@@ -421,6 +434,27 @@ voice_assistant:
 # Scripts
 
 script:   
+
+
+  - id: jack_detect_high
+    then:
+       - logger.log: "Jack detect high -> route to speaker"
+       - output.turn_off: dac_mute
+       - lambda: |-
+           id(my_es8388).write_byte(0x1D, 0x20);
+           id(my_es8388).write_byte(0x1C, 0x10);
+           id(my_es8388).write_byte(0x04, 0x30);
+
+  - id: jack_detect_low
+    then:
+       - logger.log: "Jack detect low -> route to line out"
+       - output.turn_on: dac_mute
+       - lambda: |-  
+           id(my_es8388).write_byte(0x1D, 0x00);
+           id(my_es8388).write_byte(0x1C, 0x00);
+           id(my_es8388).write_byte(0x04, 0x0C);
+
+
   - id: update_led
     then:  
        - logger.log: "==>>>update_led" 
