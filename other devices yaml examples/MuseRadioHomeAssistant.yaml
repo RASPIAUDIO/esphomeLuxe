@@ -1,0 +1,1305 @@
+substitutions:
+  name: raspiaudio-radio
+  friendly_name: Raspiaudio Radio
+
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2025.2.0
+  name_add_mac_suffix: false
+  project:
+    name: raspiaudio.voice-assistant
+    version: "2025.2.0"
+  on_boot:
+    - priority: 800
+      then:
+        - light.turn_off: screen_backlight
+        - wait_until:
+            condition:
+              lambda: return id(myDisplay).is_ready();
+            timeout: 3s
+        - if:
+            condition:
+              lambda: return id(myDisplay).is_ready();
+            then:
+              - lambda: |-
+                    id(myDisplay).show_page(logoP);
+                    id(myDisplay).update();
+              - light.turn_on: screen_backlight
+            else:
+              - logger.log: "Display not ready during boot splash"
+    - priority: -100
+      then:
+        - output.turn_off: dac_mute
+        - light.turn_on:
+            id: screen_backlight
+            brightness: 100%
+        - lambda: |-
+                id(lightTO) = 0;
+                id(phase) = 0;
+        - media_player.volume_set:
+                id: speaker_media_player
+                volume: !lambda return id(Vol);
+        - script.execute: reset_display
+#      - lambda: id(my_es8388).set_volume(0.0);
+        - micro_wake_word.start:
+
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+external_components:
+  - source: github://RASPIAUDIO/esphomeRadio@main
+    components: [es8388]
+    refresh: 0s
+
+api:
+# on_client_connected:
+#    - script.execute: reset_display
+#  on_client_disconnected:
+#    - script.execute: reset_display
+
+logger:
+  level: INFO
+  logs:
+    sensor: WARN
+
+wifi:
+#  ssid: xxxxx
+#  password: yyyyy
+#  power_save_mode: none
+  ap:
+     ssid: "Raspiaudio-radio"
+     password: "12345678"
+
+ota:
+  - platform: esphome
+    id: ota_esphome
+  - platform: http_request
+    id: ota_http_request
+
+
+update:
+  - platform: http_request
+    id: update_http_request
+    name: Firmware
+#    source: https://raw.githubusercontent.com/RASPIAUDIO/raspiaudio.github.io/main/MuseRadio/Homeassistant/manifest_update.json
+    source: https://raw.githubusercontent.com/RASPIAUDIO/muse-radio-voice-satellite/main/manifest_update.json
+
+http_request:
+
+captive_portal:
+
+improv_serial:
+
+es8388:
+#  id: my_es8388
+
+i2c:
+  id: codec_bus
+  scl: GPIO11
+  sda: GPIO18
+  scan: true
+i2c_device:
+  id: my_es8388
+  address: 0x10
+
+spi:
+  - id: spi_bus0
+    clk_pin: GPIO12
+    mosi_pin: GPIO8
+    # miso_pin: GPIOXX
+    interface: hardware
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: GPIO16
+    i2s_bclk_pin: GPIO5
+    i2s_mclk_pin: GPIO0
+
+microphone:
+  - platform: i2s_audio
+    id: radio_mic
+    sample_rate: 16000
+    i2s_din_pin: GPIO4
+    bits_per_sample: 16bit
+    adc_type: external
+
+
+speaker:
+  - platform: i2s_audio
+    id: radio_speaker
+    i2s_dout_pin: GPIO17
+    dac_type: external
+    sample_rate: 48000
+    bits_per_sample: 16bit
+    channel: stereo
+    buffer_duration: 100ms
+
+
+
+media_player:
+  - platform: speaker
+    name: None
+    id: speaker_media_player
+#    volume_min: 0.5
+#    volume_max: 0.8
+#   internal: false
+#   task_stack_in_psram: true
+    announcement_pipeline:
+      speaker: radio_speaker
+      format: WAV
+      sample_rate: 48000
+      num_channels: 1
+    files:
+      - id: little_sound
+        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac
+
+    on_announcement:
+      - if:
+          condition:
+            lambda: 'return(id(phase) != 2);'
+          then:
+            - lambda: |-
+                id(lightTO) = 0;
+                if (id(phase) == 1) {
+                  id(phase) = 2;
+                  id(external_player).execute();
+                }
+            - if:
+                condition:
+                  lambda: 'return id(auto_mute_active);'
+                then:
+                  - script.execute: mute_off
+      - micro_wake_word.stop:
+
+    on_idle:
+      - wait_until:
+         and:
+          - not:
+              media_player.is_announcing:
+          - not:
+              voice_assistant.is_running:
+      - if:
+          condition:
+              lambda: 'return(id(phase) == 4);'
+          then:
+            - lambda: |-
+                  id(phase) = 1;
+            - script.execute: reset_display
+      - if:
+          condition:
+               lambda: 'return(id(phase) == 2);'
+          then:
+            - lambda: |-
+                  id(phase) = 1;
+            - script.execute: reset_display
+
+micro_wake_word:
+  id: mww
+  microphone: radio_mic
+  stop_after_detection: false
+  models:
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
+      id: okay_nabu
+    - model: hey_jarvis
+      id: hey_jarvis
+    - model: hey_mycroft
+      id: hey_mycroft
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
+      id: stop
+      internal: true
+  on_wake_word_detected:
+    - light.turn_on:
+        id: screen_backlight
+        brightness: 100%
+        effect: none
+    - voice_assistant.start:
+        wake_word: !lambda return wake_word;
+
+voice_assistant:
+  id: va
+  microphone: radio_mic
+  media_player: speaker_media_player
+  micro_wake_word: mww
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  on_listening:
+    - logger.log: "listening 3 => phase"
+    - micro_wake_word.stop:
+    - light.turn_on:
+        id: screen_backlight
+        brightness: 100%
+        effect: none
+    - lambda: |-
+        id(phase) = 3;
+
+    - script.execute: reset_display
+
+  on_stt_end:
+    - text_sensor.template.publish:
+        id: text_request
+        state: !lambda return x;
+
+  on_tts_start:
+    - logger.log: "answering  4 => phase"
+    - text_sensor.template.publish:
+        id: text_response
+        state: !lambda return x;
+    - light.turn_on:
+        id: screen_backlight
+        brightness: 100%
+        effect: none
+    - lambda: |-
+        id(phase) = 4;
+    - script.execute: reset_display
+
+
+  on_end:
+    - wait_until:
+        and:
+          - not:
+              media_player.is_announcing:
+          - not:
+              voice_assistant.is_running:
+    - if:
+        condition:
+          lambda: 'return(id(phase) != 1);'
+        then:
+          - lambda: id(phase) = 1;
+          - script.execute: reset_display
+
+
+
+  on_error:
+    - logger.log: "ERROR!!!!!!!!!!!!!!!!"
+    - light.turn_on:
+        id: screen_backlight
+        brightness: 100%
+        effect: none
+    - delay: 1s
+    - lambda: id(phase) = 1;
+    - script.execute: reset_display
+
+
+#####################
+# Internal Components
+output:
+  - platform: gpio
+    id: dac_mute
+    pin:
+      number: GPIO46
+      inverted: true
+      mode:
+        output: true
+      ignore_strapping_warning: true
+
+  - platform: ledc
+    pin:
+      number: GPIO41
+      mode:
+        output: true
+    id: screen_backlight_pin
+
+light:
+  - platform: monochromatic
+    output: screen_backlight_pin
+    id: screen_backlight
+    name: Screen Backlight
+    restore_mode: ALWAYS_ON
+
+globals:
+  - id: lightTO
+    type: int
+    initial_value: '0'
+  - id: Vol
+    type: float
+    initial_value: '0.6'
+  - id: phase
+    type: int
+    initial_value: '0'
+  - id: mute
+    type: bool
+    initial_value: 'false'
+  - id: mic_muted
+    type: bool
+    initial_value: 'false'
+  - id: auto_mute_active
+    type: bool
+    initial_value: 'false'
+  - id: volume_display_active
+    type: bool
+    initial_value: 'false'
+  - id: volume_display_timer
+    type: int
+    initial_value: '0'
+
+
+interval:
+  - interval: 1sec
+    then:
+
+      - if:
+          condition:
+            and:
+              - light.is_on: screen_backlight
+              - lambda: 'return id(lightTO) < 60;'
+          then:
+            - lambda: id(lightTO)++;
+          else:
+            - lambda: id(lightTO) = 0;
+            - light.turn_off: screen_backlight
+      - if:
+          condition:
+            lambda: 'return id(volume_display_active);'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(volume_display_timer) >= 3;'
+                then:
+                  - lambda: |-
+                      id(volume_display_active) = false;
+                      id(volume_display_timer) = 0;
+                      if (id(myDisplay).is_ready()) {
+                        id(myDisplay).update();
+                      }
+                else:
+                  - lambda: id(volume_display_timer)++;
+      - if:
+          condition:
+              lambda: 'return(id(phase) == 0);'
+          then:
+             - light.turn_on: screen_backlight
+
+
+
+
+image:
+  - file: "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/Raspiaudio.png"
+    id: raspiIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/WFWW.png"
+    id: WFWWIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/W.png"
+    id: WIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/LISTEN.png"
+    id: LIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/ANSWER.png"
+    id: AIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/mute_mic.png"
+    id: muteMicIm
+    resize: 320x240
+    type: RGB
+  - file:  "https://github.com/RASPIAUDIO/muse-radio-voice-satellite/raw/main/images/mute_speaker.png"
+    id: muteSpeakerIm
+    resize: 320x240
+    type: RGB
+
+font:
+  - file:
+      type: gfonts
+      family: Figtree
+      weight: 300
+    id: font_request
+    size: 15
+  - file:
+      type: gfonts
+      family: Figtree
+      weight: 300
+    id: font_response
+    size: 15
+
+color:
+  - id: green
+    hex: '75D15F'
+  - id: red
+    hex: 'FF3131'
+  - id: blue
+    hex: '47B7E9'
+  - id: amber
+    hex: 'FBAB35'
+  - id: lime
+    hex: '20FC30'
+  - id: pink
+    hex: 'D92BBC'
+  - id: yellow
+    hex: 'FFC000'
+  - id: black
+    hex: '000000'
+  - id: white
+    hex: 'ffffff'
+  - id: purple
+    hex: '73264D'
+  - id: light_blue
+    hex: 'CFE2F3'
+  - id: bg_blue
+    hex: '032341'
+  - id: bg_purple
+    hex: '301020'
+  - id: bg_green
+    hex: '05350B'
+  - id: bg_red
+    hex: '3C0000'
+  - id: bg_pink
+    hex: '61034D'
+  - id: bg_charcoal
+    hex: '323232'
+  - id: bg_brown
+    hex: '41220D'
+  - id: bg_grey
+    hex: '4F4F4F'
+
+display:
+  - id: myDisplay
+    platform: ili9xxx
+    spi_id: spi_bus0
+    model: ST7789V
+    cs_pin: GPIO40
+    dc_pin: GPIO39
+    reset_pin: GPIO9
+    invert_colors: true
+    rotation: 90
+    update_interval: never
+    auto_clear_enabled: false
+    pages:
+        - id: logoP
+          lambda: |-
+            it.image(0, 0, id(raspiIm));
+            auto draw_volume_bar = [&]() {
+              if (!id(volume_display_active)) {
+                return;
+              }
+              float display_volume = id(Vol);
+              if (id(mute) || id(auto_mute_active)) {
+                display_volume = 0.0f;
+              }
+              if (display_volume < 0.0f) {
+                display_volume = 0.0f;
+              }
+              if (display_volume > 1.0f) {
+                display_volume = 1.0f;
+              }
+              const int gauge_height = 18;
+              const int margin = 3;
+              const int display_width = it.get_width();
+              const int display_height = it.get_height();
+              if (display_width <= margin * 2 || display_height <= gauge_height) {
+                return;
+              }
+              const int gauge_y = display_height - gauge_height;
+              const int inner_width = display_width - margin * 2;
+              const int inner_height = gauge_height - margin * 2;
+              int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+              if (filled_width > inner_width) {
+                filled_width = inner_width;
+              } else if (filled_width < 0) {
+                filled_width = 0;
+              }
+              it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+              if (inner_height > 0) {
+                if (filled_width > 0) {
+                  auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                  it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                }
+                it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+              }
+            };
+            draw_volume_bar();
+        - id: waitingP
+          lambda: |-
+            it.image(0, 0, id(WFWWIm));
+            auto draw_volume_bar = [&]() {
+              if (!id(volume_display_active)) {
+                return;
+              }
+              float display_volume = id(Vol);
+              if (id(mute) || id(auto_mute_active)) {
+                display_volume = 0.0f;
+              }
+              if (display_volume < 0.0f) {
+                display_volume = 0.0f;
+              }
+              if (display_volume > 1.0f) {
+                display_volume = 1.0f;
+              }
+              const int gauge_height = 18;
+              const int margin = 3;
+              const int display_width = it.get_width();
+              const int display_height = it.get_height();
+              if (display_width <= margin * 2 || display_height <= gauge_height) {
+                return;
+              }
+              const int gauge_y = display_height - gauge_height;
+              const int inner_width = display_width - margin * 2;
+              const int inner_height = gauge_height - margin * 2;
+              int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+              if (filled_width > inner_width) {
+                filled_width = inner_width;
+              } else if (filled_width < 0) {
+                filled_width = 0;
+              }
+              it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+              if (inner_height > 0) {
+                if (filled_width > 0) {
+                  auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                  it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                }
+                it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+              }
+            };
+            draw_volume_bar();
+        - id: waitingBP
+          lambda: |-
+            it.image(0, 0, id(WIm));
+            auto draw_volume_bar = [&]() {
+              if (!id(volume_display_active)) {
+                return;
+              }
+              float display_volume = id(Vol);
+              if (id(mute) || id(auto_mute_active)) {
+                display_volume = 0.0f;
+              }
+              if (display_volume < 0.0f) {
+                display_volume = 0.0f;
+              }
+              if (display_volume > 1.0f) {
+                display_volume = 1.0f;
+              }
+              const int gauge_height = 18;
+              const int margin = 3;
+              const int display_width = it.get_width();
+              const int display_height = it.get_height();
+              if (display_width <= margin * 2 || display_height <= gauge_height) {
+                return;
+              }
+              const int gauge_y = display_height - gauge_height;
+              const int inner_width = display_width - margin * 2;
+              const int inner_height = gauge_height - margin * 2;
+              int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+              if (filled_width > inner_width) {
+                filled_width = inner_width;
+              } else if (filled_width < 0) {
+                filled_width = 0;
+              }
+              it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+              if (inner_height > 0) {
+                if (filled_width > 0) {
+                  auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                  it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                }
+                it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+              }
+            };
+            draw_volume_bar();
+        - id: listeningP
+          lambda: |-
+              it.image(0, 0, id(LIm));
+              auto draw_volume_bar = [&]() {
+                if (!id(volume_display_active)) {
+                  return;
+                }
+                float display_volume = id(Vol);
+                if (id(mute) || id(auto_mute_active)) {
+                  display_volume = 0.0f;
+                }
+                if (display_volume < 0.0f) {
+                  display_volume = 0.0f;
+                }
+                if (display_volume > 1.0f) {
+                  display_volume = 1.0f;
+                }
+                const int gauge_height = 18;
+                const int margin = 3;
+                const int display_width = it.get_width();
+                const int display_height = it.get_height();
+                if (display_width <= margin * 2 || display_height <= gauge_height) {
+                  return;
+                }
+                const int gauge_y = display_height - gauge_height;
+                const int inner_width = display_width - margin * 2;
+                const int inner_height = gauge_height - margin * 2;
+                int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+                if (filled_width > inner_width) {
+                  filled_width = inner_width;
+                } else if (filled_width < 0) {
+                  filled_width = 0;
+                }
+                it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+                if (inner_height > 0) {
+                  if (filled_width > 0) {
+                    auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                    it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                  }
+                  it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+                }
+              };
+              draw_volume_bar();
+        - id: answeringP
+          lambda: |-
+              it.image(0, 0, id(AIm));
+              it.rectangle(20 , 20 , 280 , 30 , Color::BLACK );
+              it.printf(30, 25, id(font_request), Color::BLACK, "%s", id(text_request).state.c_str());
+              it.rectangle(20 , 190 , 280 , 30 , Color::BLACK );
+              it.printf(30, 195, id(font_response), Color::BLACK, "%s", id(text_response).state.c_str());
+              auto draw_volume_bar = [&]() {
+                if (!id(volume_display_active)) {
+                  return;
+                }
+                float display_volume = id(Vol);
+                if (id(mute) || id(auto_mute_active)) {
+                  display_volume = 0.0f;
+                }
+                if (display_volume < 0.0f) {
+                  display_volume = 0.0f;
+                }
+                if (display_volume > 1.0f) {
+                  display_volume = 1.0f;
+                }
+                const int gauge_height = 18;
+                const int margin = 3;
+                const int display_width = it.get_width();
+                const int display_height = it.get_height();
+                if (display_width <= margin * 2 || display_height <= gauge_height) {
+                  return;
+                }
+                const int gauge_y = display_height - gauge_height;
+                const int inner_width = display_width - margin * 2;
+                const int inner_height = gauge_height - margin * 2;
+                int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+                if (filled_width > inner_width) {
+                  filled_width = inner_width;
+                } else if (filled_width < 0) {
+                  filled_width = 0;
+                }
+                it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+                if (inner_height > 0) {
+                  if (filled_width > 0) {
+                    auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                    it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                  }
+                  it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+                }
+              };
+              draw_volume_bar();
+        - id: muteMicP
+          lambda: |-
+            it.image(0, 0, id(muteMicIm));
+            auto draw_volume_bar = [&]() {
+              if (!id(volume_display_active)) {
+                return;
+              }
+              float display_volume = id(Vol);
+              if (id(mute) || id(auto_mute_active)) {
+                display_volume = 0.0f;
+              }
+              if (display_volume < 0.0f) {
+                display_volume = 0.0f;
+              }
+              if (display_volume > 1.0f) {
+                display_volume = 1.0f;
+              }
+              const int gauge_height = 18;
+              const int margin = 3;
+              const int display_width = it.get_width();
+              const int display_height = it.get_height();
+              if (display_width <= margin * 2 || display_height <= gauge_height) {
+                return;
+              }
+              const int gauge_y = display_height - gauge_height;
+              const int inner_width = display_width - margin * 2;
+              const int inner_height = gauge_height - margin * 2;
+              int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+              if (filled_width > inner_width) {
+                filled_width = inner_width;
+              } else if (filled_width < 0) {
+                filled_width = 0;
+              }
+              it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+              if (inner_height > 0) {
+                if (filled_width > 0) {
+                  auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                  it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                }
+                it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+              }
+            };
+            draw_volume_bar();
+        - id: muteSpeakerP
+          lambda: |-
+            it.image(0, 0, id(muteSpeakerIm));
+            auto draw_volume_bar = [&]() {
+              if (!id(volume_display_active)) {
+                return;
+              }
+              float display_volume = id(Vol);
+              if (id(mute) || id(auto_mute_active)) {
+                display_volume = 0.0f;
+              }
+              if (display_volume < 0.0f) {
+                display_volume = 0.0f;
+              }
+              if (display_volume > 1.0f) {
+                display_volume = 1.0f;
+              }
+              const int gauge_height = 18;
+              const int margin = 3;
+              const int display_width = it.get_width();
+              const int display_height = it.get_height();
+              if (display_width <= margin * 2 || display_height <= gauge_height) {
+                return;
+              }
+              const int gauge_y = display_height - gauge_height;
+              const int inner_width = display_width - margin * 2;
+              const int inner_height = gauge_height - margin * 2;
+              int filled_width = static_cast<int>(inner_width * display_volume + 0.5f);
+              if (filled_width > inner_width) {
+                filled_width = inner_width;
+              } else if (filled_width < 0) {
+                filled_width = 0;
+              }
+              it.filled_rectangle(0, gauge_y, display_width, gauge_height, id(bg_charcoal));
+              if (inner_height > 0) {
+                if (filled_width > 0) {
+                  auto bar_color = id(volume_display_active) ? id(lime) : id(light_blue);
+                  it.filled_rectangle(margin, gauge_y + margin, filled_width, inner_height, bar_color);
+                }
+                it.rectangle(margin, gauge_y + margin, inner_width, inner_height, id(white));
+              }
+            };
+            draw_volume_bar();
+
+
+# Home Assistant Components
+sensor:
+  - platform: rotary_encoder
+    name: "Volume"
+    id: volume_encoder
+    pin_a:
+      number: GPIO42
+      mode:
+        input: true
+        pullup: true
+    pin_b:
+      number: GPIO3
+      mode:
+        input: true
+        pullup: true
+    on_anticlockwise:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+                id(lightTO) = 0;
+                id(Vol) -= 0.02;
+                if(id(Vol) < 0) id(Vol) = 0;
+                id(volume_display_active) = true;
+                id(volume_display_timer) = 0;
+        - media_player.volume_set:
+                id: speaker_media_player
+                volume: !lambda return id(Vol);
+        - script.execute: schedule_volume_update
+    on_clockwise:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+                id(lightTO) = 0;
+                id(Vol) += 0.02;
+                if(id(Vol) > 1) id(Vol) = 1;
+                id(volume_display_active) = true;
+                id(volume_display_timer) = 0;
+        - media_player.volume_set:
+                id: speaker_media_player
+                volume: !lambda return id(Vol);
+        - script.execute: schedule_volume_update
+
+  - platform: rotary_encoder
+    name: "Dummy"
+    id: function_encoder
+    pin_a:
+      number: GPIO7
+      mode:
+        input: true
+        pullup: true
+    pin_b:
+      number: GPIO6
+      mode:
+        input: true
+        pullup: true
+    on_anticlockwise:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+                id(lightTO) = 0;
+
+    on_clockwise:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+                id(lightTO) = 0;
+  - platform: adc
+    id: button_adc
+    pin: GPIO1
+    attenuation: auto
+    update_interval: .1s
+    on_value_range:
+      - above: 3.0
+        then:
+          - binary_sensor.template.publish:
+              id: btn_confirm
+              state: OFF
+          - binary_sensor.template.publish:
+              id: btn_1
+              state: OFF
+          - binary_sensor.template.publish:
+              id: btn_2
+              state: OFF
+          - binary_sensor.template.publish:
+              id: btn_3
+              state: OFF
+      - above: 0.41
+        below: 0.45
+        then:
+          - binary_sensor.template.publish:
+              id: btn_3
+              state: ON
+      - above: 0.8
+        below: 0.84
+        then:
+          - binary_sensor.template.publish:
+              id: btn_confirm
+              state: ON
+      - above: 1.50
+        below: 1.61
+        then:
+          - binary_sensor.template.publish:
+              id: btn_1
+              state: ON
+      - above: 1.98
+        below: 2.03
+        then:
+          - binary_sensor.template.publish:
+              id: btn_2
+              state: ON
+
+
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO10
+      mode:
+        input: true
+        pullup: true
+    id: jack_detect
+    name: Jack Detect
+    internal: true
+    on_press:
+      - script.execute: jack_detect_high
+    on_release:
+      - script.execute: jack_detect_low
+  - platform: gpio
+    pin:
+      number: GPIO48
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    id: click_vol
+    name: Mute
+#    disabled_by_default: true
+    on_press:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+            id(lightTO) = 0;
+        - if:
+            condition:
+              lambda: 'return id(mute);'
+            then:
+              - logger.log: "unmute!"
+              - media_player.volume_set:
+                  volume: !lambda 'return id(Vol);'
+              - lambda: id(mute) = false;
+              - lambda: id(auto_mute_active) = false;
+            else:
+              - logger.log: "mute!"
+              - media_player.volume_set:
+                  volume: '0'
+              - lambda: id(mute) = true;
+              - lambda: id(auto_mute_active) = false;
+        - lambda: |-
+            id(volume_display_active) = true;
+            id(volume_display_timer) = 0;
+        - script.execute: schedule_volume_update
+        - script.execute: reset_display
+
+  - platform: gpio
+    pin:
+      number: GPIO45
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    id: click_sta
+    name: Assist
+    on_click:
+      then:
+        - light.turn_on: screen_backlight
+        - lambda: |-
+            id(lightTO) = 0;
+        - if:
+            condition:
+              lambda: 'return(id(phase) == 3 || id(phase) == 4);'
+            then:
+              - if:
+                  condition:
+                    voice_assistant.is_running:
+                  then:
+                    - voice_assistant.stop:
+                    - wait_until:
+                        not:
+                          voice_assistant.is_running:
+              - if:
+                  condition:
+                    media_player.is_announcing:
+                  then:
+                    - media_player.stop:
+                        id: speaker_media_player
+                        announcement: true
+              - if:
+                  condition:
+                    media_player.is_playing:
+                  then:
+                    - media_player.stop:
+                        id: speaker_media_player
+              - micro_wake_word.start:
+              - lambda: |-
+                  id(mute) = false;
+                  id(auto_mute_active) = false;
+                  id(phase) = 1;
+              - script.execute: reset_display
+            else:
+              - if:
+                  condition:
+                    media_player.is_announcing:
+                  then:
+                    - media_player.stop:
+                        id: speaker_media_player
+                        announcement: true
+              - if:
+                  condition:
+                    media_player.is_playing:
+                  then:
+                    - media_player.stop:
+                        id: speaker_media_player
+              - if:
+                  condition:
+                    voice_assistant.is_running:
+                  then:
+                    - voice_assistant.stop:
+                    - wait_until:
+                        not:
+                          voice_assistant.is_running:
+              - micro_wake_word.stop:
+              - lambda: |-
+                  id(phase) = 3;
+              - script.execute: reset_display
+              - voice_assistant.start:
+
+
+  - platform: template
+    name: "Radio 4"
+    id: btn_confirm
+    on_press:
+       - logger.log: "Radio 4 button pressed"
+
+
+  - platform: template
+    name: "Radio 1"
+    id: btn_1
+    on_press:
+       - logger.log: "Radio 1 button pressed"
+
+
+  - platform: template
+    name: "Radio 2"
+    id: btn_2
+    on_press:
+       - logger.log: "Radio 2 button pressed"
+
+
+  - platform: template
+    name: "Radio 3"
+    id: btn_3
+    on_press:
+       - logger.log: "Radio 3 button pressed"
+
+switch:
+  - platform: template
+    id: mic_mute_switch
+    name: "Microphone Mute"
+    icon: "mdi:microphone-off"
+    entity_category: config
+    lambda: |-
+      return id(mic_muted);
+    turn_on_action:
+      - microphone.mute: radio_mic
+      - lambda: id(mic_muted) = true;
+      - if:
+          condition:
+            voice_assistant.is_running:
+          then:
+            - voice_assistant.stop:
+      - micro_wake_word.stop:
+      - script.execute: reset_display
+    turn_off_action:
+      - microphone.unmute: radio_mic
+      - lambda: id(mic_muted) = false;
+      - micro_wake_word.start:
+      - script.execute: reset_display
+
+select:
+  - platform: template
+    name: "Wake word sensitivity"
+    optimistic: true
+    initial_option: Slightly sensitive
+    restore_value: true
+    entity_category: config
+    options:
+      - Slightly sensitive
+      - Moderately sensitive
+      - Very sensitive
+    on_value:
+      # Sets specific wake word probabilities computed for each particular model
+      # Note probability cutoffs are set as a quantized uint8 value, each comment has the corresponding floating point cutoff
+      # False Accepts per Hour values are tested against all units and channels from the Dinner Party Corpus.
+      # These cutoffs apply only to the specific models included in the firmware: okay_nabu@20241226.3, hey_jarvis@v2, hey_mycroft@v2
+      lambda: |-
+        if (x == "Slightly sensitive") {
+          id(okay_nabu).set_probability_cutoff(217);    // 0.85 -> 0.000 FAPH on DipCo (Manifest's default)
+          id(hey_jarvis).set_probability_cutoff(247);   // 0.97 -> 0.563 FAPH on DipCo (Manifest's default)
+          id(hey_mycroft).set_probability_cutoff(253);  // 0.99 -> 0.567 FAPH on DipCo
+        } else if (x == "Moderately sensitive") {
+          id(okay_nabu).set_probability_cutoff(176);    // 0.69 -> 0.376 FAPH on DipCo
+          id(hey_jarvis).set_probability_cutoff(235);   // 0.92 -> 0.939 FAPH on DipCo
+          id(hey_mycroft).set_probability_cutoff(242);  // 0.95 -> 1.502 FAPH on DipCo (Manifest's default)
+        } else if (x == "Very sensitive") {
+          id(okay_nabu).set_probability_cutoff(143);    // 0.56 -> 0.751 FAPH on DipCo
+          id(hey_jarvis).set_probability_cutoff(212);   // 0.83 -> 1.502 FAPH on DipCo
+          id(hey_mycroft).set_probability_cutoff(237);  // 0.93 -> 1.878 FAPH on DipCo
+        }
+
+text_sensor:
+  - id: text_request
+    platform: template
+    on_value:
+      lambda: |-
+        if(id(text_request).state.length()>40) {
+          std::string name = id(text_request).state.c_str();
+          std::string truncated = esphome::str_truncate(name.c_str(),39);
+          id(text_request).state = (truncated+"...").c_str();
+        }
+
+  - id: text_response
+    platform: template
+    on_value:
+      lambda: |-
+        if(id(text_response).state.length()>32) {
+          std::string name = id(text_response).state.c_str();
+          std::string truncated = esphome::str_truncate(name.c_str(),31);
+          id(text_response).state = (truncated+"...").c_str();
+        }
+
+
+
+
+
+#########
+# Scripts
+
+script:
+
+  - id: jack_detect_high
+    then:
+       - logger.log: "Jack detect high -> route to speaker"
+       - output.turn_off: dac_mute
+       - lambda: |-
+           id(my_es8388).write_byte(0x1D, 0x20);
+           id(my_es8388).write_byte(0x1C, 0x10);
+           id(my_es8388).write_byte(0x04, 0x30);
+
+  - id: jack_detect_low
+    then:
+       - logger.log: "Jack detect low -> route to line out"
+       - output.turn_on: dac_mute
+       - lambda: |-
+           id(my_es8388).write_byte(0x1D, 0x00);
+           id(my_es8388).write_byte(0x1C, 0x00);
+           id(my_es8388).write_byte(0x04, 0x0C);
+
+  - id: schedule_volume_update
+    mode: restart
+    then:
+      - delay: 400ms
+      - lambda: |-
+          if (id(volume_display_active) && id(myDisplay).is_ready()) {
+            id(myDisplay).update();
+          }
+
+  - id: reset_display
+    mode: restart
+    then: 
+       - logger.log: "===> reset_display" 
+       - lambda: |-
+            id(lightTO) = 0;
+            if (id(mic_muted)) {
+              id(myDisplay).show_page(muteMicP);
+              id(myDisplay).update();
+              return;
+            }
+            if (id(mute) && !id(auto_mute_active)) {
+              id(myDisplay).show_page(muteSpeakerP);
+              id(myDisplay).update();
+              return;
+            }
+            if ((id(phase) == 0) && (!id(logo).is_running())) {
+              id(logo).execute();
+            } else if (id(phase) == 1) {
+              id(waiting).execute();
+            } else if (id(phase) == 2) {
+              id(external_player).execute();
+            } else if (id(phase) == 3) {
+              id(listening).execute();
+            } else if (id(phase) == 4) {
+              id(answering).execute();
+            }
+
+  - id: logo
+    then:
+       - logger.log: "===> logo"
+       - media_player.speaker.play_on_device_media_file:
+           media_file: little_sound
+           announcement: false
+       - lambda: |-
+           id(myDisplay).show_page(logoP);
+           id(myDisplay).update();
+           id(lightTO) = 0;
+       - light.turn_on: screen_backlight
+       - delay: 8sec
+       - lambda: id(phase) = 1;
+       - script.execute: reset_display
+
+  - id: waiting
+    mode: restart
+    then:
+               - if:
+                   condition:
+                         voice_assistant.is_running:
+                   then:
+                      - delay: 1s
+                      - voice_assistant.stop:
+               - script.execute: mute_on
+               - micro_wake_word.start:
+               - logger.log: "===> wakeword"
+               - lambda: |-
+                   id(myDisplay).show_page(waitingP);
+                   id(myDisplay).update();
+                   id(lightTO) = 0;
+               - light.turn_on: screen_backlight
+
+
+  - id: listening
+    mode: restart
+    then:
+       - logger.log: "===> listening"
+       - script.execute: mute_on
+       - lambda: |-
+            id(myDisplay).show_page(listeningP);
+            id(myDisplay).update();
+            id(lightTO) = 0;
+
+       - light.turn_on: screen_backlight
+
+
+  - id: answering
+    mode: restart
+    then:
+       - logger.log: "===> answering"
+       - script.execute: mute_off
+       - lambda: |-
+            id(myDisplay).show_page(answeringP);
+            id(myDisplay).update();
+            id(lightTO) = 0;
+       - light.turn_on: screen_backlight
+       - delay: 10s
+
+
+
+
+  - id: external_player
+    mode: restart
+    then:
+       - logger.log: "===> front end player"
+#       - script.execute: mute_off
+       - lambda: |-
+            id(myDisplay).show_page(waitingBP);
+            id(myDisplay).update();
+            id(lightTO) = 0;
+       - light.turn_on: screen_backlight
+
+  - id: mute_on
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(auto_mute_active);'
+          then:
+            - media_player.volume_set:
+                volume: '0'
+      - lambda: |-
+          id(mute) = true;
+          id(auto_mute_active) = true;
+          id(volume_display_active) = true;
+          id(volume_display_timer) = 0;
+      - script.execute: schedule_volume_update
+
+  - id: mute_off
+    then:
+      - if:
+          condition:
+            lambda: 'return id(auto_mute_active);'
+          then:
+            - media_player.volume_set:
+                volume: !lambda return(id(Vol));
+      - lambda: |-
+          id(mute) = false;
+          id(auto_mute_active) = false;
+          id(volume_display_active) = true;
+          id(volume_display_timer) = 0;
+      - script.execute: schedule_volume_update
+
+
+
+
