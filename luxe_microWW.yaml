@@ -22,6 +22,8 @@ esphome:
   on_boot:
     priority: -100.0
     then:
+      - output.turn_on: dac_mute
+      - lambda: id(muteH) = true;
       - lambda: id(phase) = 0;
       - script.execute: update_led  
             
