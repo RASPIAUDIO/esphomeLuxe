@@ -145,6 +145,9 @@ globals:
   - id: audio_started
     type: bool
     initial_value: 'false'
+  - id: last_volume_cmd
+    type: float
+    initial_value: '-1.0'
         
 interval:
   - interval: 0.1sec   
@@ -270,9 +273,14 @@ binary_sensor:
         - lambda: |-       
                 id(Vol) += 0.05;
                 if(id(Vol) > 1) id(Vol) = 1;            
-        - media_player.volume_set: 
-                id: luxe_media_player        
-                volume: !lambda return id(Vol);         
+        - if:
+            condition:
+              lambda: 'return fabsf(id(last_volume_cmd) - id(Vol)) > 0.005f;'
+            then:
+              - media_player.volume_set: 
+                  id: luxe_media_player        
+                  volume: !lambda return id(Vol);         
+              - lambda: id(last_volume_cmd) = id(Vol);
          
   - platform: gpio
     pin:
@@ -286,9 +294,14 @@ binary_sensor:
         - lambda: |-       
                 id(Vol) -= 0.05;
                 if(id(Vol) < 0) id(Vol) = 0;            
-        - media_player.volume_set: 
-                id: luxe_media_player        
-                volume: !lambda return id(Vol);              
+        - if:
+            condition:
+              lambda: 'return fabsf(id(last_volume_cmd) - id(Vol)) > 0.005f;'
+            then:
+              - media_player.volume_set: 
+                  id: luxe_media_player        
+                  volume: !lambda return id(Vol);              
+              - lambda: id(last_volume_cmd) = id(Vol);
       
   - platform: gpio
     pin:
@@ -607,15 +620,27 @@ script:
                         
   - id: mute_on
     then:
-       - media_player.volume_set:
-           volume: '0'
+       - if:
+           condition:
+             lambda: 'return fabsf(id(last_volume_cmd)) > 0.005f;'
+           then:
+             - media_player.volume_set:
+                 id: luxe_media_player
+                 volume: '0'
+             - lambda: id(last_volume_cmd) = 0.0f;
        - lambda: id(mute) = true;
      
   - id: mute_off
     then:
 
-       - media_player.volume_set:
-            volume: !lambda return(id(Vol));
+       - if:
+           condition:
+             lambda: 'return fabsf(id(last_volume_cmd) - id(Vol)) > 0.005f;'
+           then:
+             - media_player.volume_set:
+                  id: luxe_media_player
+                  volume: !lambda return(id(Vol));
+             - lambda: id(last_volume_cmd) = id(Vol);
        - lambda: id(mute) = false;               
             
       
