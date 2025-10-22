@@ -395,7 +395,7 @@ media_player:
       num_channels: 1       
     files:
       - id: little_sound
-        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.wav                
+        file: https://github.com/RASPIAUDIO/esphomeLuxe/raw/refs/heads/main/wav/sounds_timer_finished.wav                
     on_announcement: 
       - micro_wake_word.stop:
       - wait_until:
