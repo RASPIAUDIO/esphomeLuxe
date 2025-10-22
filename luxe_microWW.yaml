@@ -37,9 +37,10 @@ esp32:
     type: esp-idf
     version: recommended
     sdkconfig_options:
-      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
-      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
-      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_ESP_CONSOLE_USB_CDC: "n"
+      CONFIG_ESP_CONSOLE_UART_DEFAULT: "y"
+      CONFIG_ESP_CONSOLE_UART_NUM: "0"
+      CONFIG_ESP_CONSOLE_UART_BAUDRATE: "115200"
        
 micro_wake_word:
   id: mww
@@ -87,10 +88,12 @@ wifi:
 
 captive_portal:
                 
-improv_serial: 
+improv_serial:  # Disable during debugging to free UART0 for logs
 
 logger:
-   level: NONE
+  level: DEBUG
+  baud_rate: 115200
+  hardware_uart: UART0
 
 ##########
 # Hardware Configuration
@@ -133,6 +136,15 @@ globals:
   - id: muteH 
     type: bool
     initial_value: 'false'     
+  - id: last_led_phase
+    type: int
+    initial_value: '-1'
+  - id: audio_active
+    type: bool
+    initial_value: 'false'
+  - id: audio_started
+    type: bool
+    initial_value: 'false'
         
 interval:
   - interval: 0.1sec   
@@ -161,6 +173,14 @@ interval:
                   - output.turn_off: dac_mute   
                   - lambda: id(muteH) = false;          
                   - logger.log: "====> hardware unmute"               
+     
+      - if:
+          condition:
+            and:
+              - lambda: 'return id(audio_active) && !id(audio_started);'
+              - speaker.is_playing:
+          then:
+            - lambda: id(audio_started) = true;
           
 
 sensor:
@@ -363,6 +383,13 @@ media_player:
         file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac                
     on_announcement: 
       - micro_wake_word.stop:
+      - wait_until:
+          not:
+            micro_wake_word.is_running:
+      - microphone.mute: luxe_mic
+      - lambda: |-
+          id(audio_active) = true;
+          id(audio_started) = false;
       - if:
            condition:
                 lambda: 'return(id(phase) != 2);'
@@ -373,20 +400,28 @@ media_player:
               - script.execute: update_led    
                      
     on_idle:
-      - wait_until:
-         and:
-          - not:
-              media_player.is_announcing:
-          - not:
-              voice_assistant.is_running:    
       - if:
-          condition:              
-              lambda: 'return((id(phase) == 4) || (id(phase) == 2));'
+          condition:
+            lambda: 'return id(audio_active) && id(audio_started);'
           then:
+            - wait_until:
+               and:
+                - not:
+                    media_player.is_announcing:
+                - not:
+                    voice_assistant.is_running:    
+            - if:
+                condition:              
+                    lambda: 'return((id(phase) == 4) || (id(phase) == 2));'
+                then:
+                  - lambda: |-
+                       id(phase) = 1; 
+            - microphone.unmute: luxe_mic
+            - micro_wake_word.start:                                              
+            - script.execute: update_led
             - lambda: |-
-                 id(phase) = 1; 
-      - micro_wake_word.start:                                              
-      - script.execute: update_led     
+                id(audio_active) = false;
+                id(audio_started) = false;
       
 select:
   - platform: template
@@ -435,7 +470,6 @@ voice_assistant:
      - script.execute: update_led
 
   on_stt_end:
-     - media_player.play_media: !lambda return x;
      - light.turn_on:
         id: top_led
         blue: 60%
@@ -445,11 +479,18 @@ voice_assistant:
       
 
   on_tts_start:
-     - logger.log: "answering  4 => phase"                   
-     - micro_wake_word.stop:
-     - lambda: |-
+    - logger.log: "answering  4 => phase"                   
+    - micro_wake_word.stop:
+    - wait_until:
+        not:
+          micro_wake_word.is_running:
+    - microphone.mute: luxe_mic
+    - lambda: |-
+        id(audio_active) = true;
+        id(audio_started) = false;
+    - lambda: |-
         id(phase) = 4;
-     - script.execute: update_led
+    - script.execute: update_led
                      
   on_error:
     - logger.log: "ERROR!!!!!!!!!!!!!!!!"  
@@ -491,13 +532,18 @@ script:
 
   - id: update_led
     then:  
-       - logger.log: "==>>>update_led" 
-       - lambda: |-
-             if(id(phase) == 0)id(start).execute();
-             if(id(phase) == 1)id(waiting).execute();  
-             if(id(phase) == 2)id(external_player).execute();                      
-             if(id(phase) == 3)id(listening).execute();
-             if(id(phase) == 4)id(answering).execute();
+       - if:
+           condition:
+             lambda: 'return id(phase) != id(last_led_phase);'
+           then:
+             - lambda: id(last_led_phase) = id(phase);
+             - logger.log: "==>>>update_led" 
+             - lambda: |-
+                   if(id(phase) == 0)id(start).execute();
+                   if(id(phase) == 1)id(waiting).execute();  
+                   if(id(phase) == 2)id(external_player).execute();                      
+                   if(id(phase) == 3)id(listening).execute();
+                   if(id(phase) == 4)id(answering).execute();
                          
   - id: start           
     then:
@@ -561,7 +607,6 @@ script:
                         
   - id: mute_on
     then:
- 
        - media_player.volume_set:
            volume: '0'
        - lambda: id(mute) = true;

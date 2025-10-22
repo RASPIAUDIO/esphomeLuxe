@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Espressif Documentation</title>
+    <meta name="description" content="Official technical documentation portal for Espressif Systems. Espressif is a global high-tech leader in wireless communication, IoT, AI SoCs, software, and solutions, for a smarter and greener future.">
+    <meta name="keywords" content="Espressif Technical Documentation, Espressif Official Documentation, ESP, Espressif Systems, Semiconductor, IoT, AI, Wireless Connectivity, MCU, SoC, Software, SDK, Cloud, AIoT Solution, Matter, Wi-Fi, Bluetooth, Thread, Blufi,  Zigbee">
+   
+    <script type="module" crossorigin src="/assets/js/index-CU4D_EFb.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/css/index-w900jeoF.css">
+  </head>
+  <body>
+    <div id="app">
+      <style>
+        :root {
+          --esp-color-primary: #55A2E0;
+          --esp-light-primary-1: #66abe3;
+        }
+        .app-loading {
+          display: flex;
+          width: 100%;
+          height: 100%;
+          justify-content: center;
+          align-items: center;
+          flex-direction: column;
+          background: #f0f2f5;
+        }
+        .app-loading .app-loading-wrap {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          display: flex;
+          -webkit-transform: translate3d(-50%, -50%, 0);
+          transform: translate3d(-50%, -50%, 0);
+          justify-content: center;
+          align-items: center;
+          flex-direction: column;
+        }
+        .app-loading .app-loading-logo {
+          width: 200px;
+          margin: 0 auto 15px auto;
+        }
+        .app-loading .app-loading-item {
+          position: relative;
+          display: inline-block;
+          width: 60px;
+          height: 60px;
+          vertical-align: middle;
+          border-radius: 50%;
+        }
+        .app-loading .app-loading-outter {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border: 4px solid var(--esp-color-primary);
+          border-left-color: transparent;
+          border-radius: 50%;
+          animation: loader-outter 1s cubic-bezier(0.42, 0.61, 0.58, 0.41) infinite;
+        }
+        .app-loading .app-loading-inner {
+          position: absolute;
+          top: calc(50% - 20px);
+          left: calc(50% - 20px);
+          width: 40px;
+          height: 40px;
+          border: 4px solid var(--esp-light-primary-1);
+          border-top-color: transparent;
+          border-radius: 50%;
+          animation: loader-inner 1s cubic-bezier(0.42, 0.61, 0.58, 0.41) infinite;
+        }
+        @-webkit-keyframes loader-outter {
+          0% {
+            -webkit-transform: rotate(0deg);
+            transform: rotate(0deg);
+          }
+
+          100% {
+            -webkit-transform: rotate(360deg);
+            transform: rotate(360deg);
+          }
+        }
+        @keyframes loader-outter {
+          0% {
+            -webkit-transform: rotate(0deg);
+            transform: rotate(0deg);
+          }
+
+          100% {
+            -webkit-transform: rotate(360deg);
+            transform: rotate(360deg);
+          }
+        }
+        @-webkit-keyframes loader-inner {
+          0% {
+            -webkit-transform: rotate(0deg);
+            transform: rotate(0deg);
+          }
+
+          100% {
+            -webkit-transform: rotate(-360deg);
+            transform: rotate(-360deg);
+          }
+        }
+        @keyframes loader-inner {
+          0% {
+            -webkit-transform: rotate(0deg);
+            transform: rotate(0deg);
+          }
+
+          100% {
+            -webkit-transform: rotate(-360deg);
+            transform: rotate(-360deg);
+          }
+        }
+      </style>
+      <div class="app-loading">
+        <div class="app-loading-wrap">
+          <div class="app-loading-title">
+            <img src="data:image/svg+xml,%3csvg%20id='图层_1'%20data-name='图层%201'%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20116.84%2021.04'%3e%3cdefs%3e%3cstyle%3e.cls-1{fill:%23e7352c;}.cls-2{fill:%23333;}%3c/style%3e%3c/defs%3e%3ctitle%3e导航栏-菜单-logo%3c/title%3e%3cpath%20class='cls-1'%20d='M6.93,15.65a1.48,1.48,0,1,1-1.48-1.48,1.48,1.48,0,0,1,1.48,1.48'/%3e%3cpath%20class='cls-1'%20d='M19.84,14.11a15.34,15.34,0,0,0-13-13A9.73,9.73,0,0,0,4.69,2.66V4.09A12.18,12.18,0,0,1,16.86,16.25h1.43a10.25,10.25,0,0,0,1.55-2.14'/%3e%3cpath%20class='cls-1'%20d='M21,9.62A9.62,9.62,0,0,0,11.33,0c-.34,0-.67,0-1,.05l-.22.64A16.55,16.55,0,0,1,20.25,10.82l.64-.23c0-.32.06-.64.06-1'/%3e%3cpath%20class='cls-1'%20d='M11.44,21A11.44,11.44,0,0,1,0,9.61,11.36,11.36,0,0,1,3.35,1.52L4,2.13a10.56,10.56,0,0,0,0,15,10.56,10.56,0,0,0,15,0l.61.61A11.35,11.35,0,0,1,11.44,21'/%3e%3cpath%20class='cls-1'%20d='M11.31,16.91A6.65,6.65,0,0,0,8.7,11,6.51,6.51,0,0,0,5.35,9.64.61.61,0,0,1,4.82,9a.59.59,0,0,1,.65-.54,7.85,7.85,0,0,1,7,8.58,6.85,6.85,0,0,1-.26,1.35l1.74.49a9.66,9.66,0,0,0,1.5-.57,10.64,10.64,0,0,0,.19-2.05A11,11,0,0,0,6.31,5.4a4.84,4.84,0,0,0-1.75,0A3.81,3.81,0,0,0,2.67,6.57a3.74,3.74,0,0,0,1.67,6,8.66,8.66,0,0,0,.94.17h0a3.51,3.51,0,0,1,2.92,3.46,3.47,3.47,0,0,1-.56,1.89l1.2.77a8.91,8.91,0,0,0,1.8.3,6.58,6.58,0,0,0,.66-2.3'/%3e%3crect%20class='cls-2'%20x='104.18'%20y='3.17'%20width='2.21'%20height='14.7'/%3e%3cpath%20class='cls-2'%20d='M68.39,11.73a2.51,2.51,0,0,0,1.46-2.41V5.81a2.64,2.64,0,0,0-.78-1.95,2.6,2.6,0,0,0-1.78-.7H60.91V17.89h2.22V12H65.4a2,2,0,0,1,2,1.74l.87,4.17h2.42L69.75,14a3,3,0,0,0-1.36-2.22M63.13,5.24v0h3.8a.75.75,0,0,1,.71.84v3a.75.75,0,0,1-.71.84h-3.8Z'/%3e%3cpath%20class='cls-2'%20d='M29.09,3.87a2.67,2.67,0,0,0-.78,2v9.4a2.64,2.64,0,0,0,.78,1.95,2.62,2.62,0,0,0,1.78.7h6V15.82h-5.6a.76.76,0,0,1-.72-.84V11.2H36V9.14H30.52V6.08a.76.76,0,0,1,.72-.84h5.6V3.17h-6a2.66,2.66,0,0,0-1.78.7'/%3e%3cpath%20class='cls-2'%20d='M111.24,5.24h5.6V3.17h-6a2.66,2.66,0,0,0-1.78.7,2.71,2.71,0,0,0-.78,2v12h2.21V11.2H116V9.14h-5.52V6.08a.76.76,0,0,1,.72-.84'/%3e%3cpath%20class='cls-2'%20d='M45.2,9.14H41.77A.79.79,0,0,1,41,8.35V6.08a.75.75,0,0,1,.71-.84H47.2V3.17H41.33a2.66,2.66,0,0,0-1.78.7,2.67,2.67,0,0,0-.78,2V8.88a2.59,2.59,0,0,0,2.58,2.59h3.44a.79.79,0,0,1,.79.79V15a.76.76,0,0,1-.72.84H38.77v2.07h6.46a2.55,2.55,0,0,0,2.56-2.66v-3.5A2.58,2.58,0,0,0,45.2,9.14'/%3e%3cpath%20class='cls-2'%20d='M72.65,3.87a2.67,2.67,0,0,0-.78,2v9.4a2.64,2.64,0,0,0,.78,1.95,2.62,2.62,0,0,0,1.78.7h6V15.82h-5.6a.75.75,0,0,1-.71-.84V11.2h5.51V9.14H74.08V6.08a.75.75,0,0,1,.71-.84h5.6V3.17h-6a2.66,2.66,0,0,0-1.78.7'/%3e%3cpath%20class='cls-2'%20d='M88.76,9.14H85.33a.79.79,0,0,1-.79-.79V6.08a.75.75,0,0,1,.71-.84h5.51V3.17H84.88a2.64,2.64,0,0,0-1.77.7,2.67,2.67,0,0,0-.78,2V8.88a2.58,2.58,0,0,0,2.58,2.59h3.43a.79.79,0,0,1,.79.79V15a.75.75,0,0,1-.71.84H82.33v2.07h6.46a2.6,2.6,0,0,0,1.77-.71,2.63,2.63,0,0,0,.79-2v-3.5a2.58,2.58,0,0,0-2.59-2.58'/%3e%3cpath%20class='cls-2'%20d='M99.6,9.14H96.17a.79.79,0,0,1-.79-.79V6.08a.75.75,0,0,1,.71-.84h5.51V3.17H95.73a2.66,2.66,0,0,0-1.78.7,2.67,2.67,0,0,0-.78,2V8.88a2.59,2.59,0,0,0,2.58,2.59h3.44a.79.79,0,0,1,.79.79V15a.76.76,0,0,1-.72.84H93.17v2.07h6.46a2.55,2.55,0,0,0,2.56-2.66v-3.5A2.58,2.58,0,0,0,99.6,9.14'/%3e%3cpath%20class='cls-2'%20d='M56.48,3.16H49.79V17.89H52V12.17h4.48a2.57,2.57,0,0,0,1.77-.7,2.63,2.63,0,0,0,.79-2V5.81a2.65,2.65,0,0,0-.79-1.95,2.57,2.57,0,0,0-1.77-.7m.34,6.11a.75.75,0,0,1-.71.84H52V5.22h4.11a.75.75,0,0,1,.71.84Z'/%3e%3c/svg%3e" class="app-loading-logo" alt="Logo" />
+          </div>
+          <div class="app-loading-item">
+            <div class="app-loading-outter"></div>
+            <div class="app-loading-inner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.MathJax = {
+        tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+        svg: { fontCache: 'global' }
+      };
+    </script>
+    <script src="/static/mathjax/es5/tex-svg.js"></script>
+    <script src="/static/waveDrom/skins.js" type="text/javascript"></script>
+    <script src="/static/waveDrom/wavedrom.min.js" type="text/javascript"></script>
+    <script src="/static/mermaid/mermaid.js"></script>
+    <script>
+      mermaid.initialize({ startOnLoad: true });
+    </script>
+  </body>
+</html>
