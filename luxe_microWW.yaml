@@ -94,6 +94,8 @@ logger:
   level: DEBUG
   baud_rate: 115200
   hardware_uart: UART0
+  logs:
+    media_player: WARN
 
 ##########
 # Hardware Configuration
@@ -388,12 +390,12 @@ media_player:
 #    volume_max: 0.8
     announcement_pipeline:
       speaker: luxe_speaker
-      format: FLAC
+      format: WAV
       sample_rate: 48000
       num_channels: 1       
     files:
       - id: little_sound
-        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.flac                
+        file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/timer_finished.wav                
     on_announcement: 
       - micro_wake_word.stop:
       - wait_until:
@@ -570,6 +572,12 @@ script:
      - lambda: id(my_es8388).setup();
      - output.turn_off: dac_mute
      - lambda: id(phase) = 1;
+     - micro_wake_word.stop:
+     - wait_until:
+         not:
+           micro_wake_word.is_running:
+     - microphone.mute: luxe_mic
+     - delay: 200ms
      - media_player.speaker.play_on_device_media_file:
           media_file: little_sound
           announcement: false      
