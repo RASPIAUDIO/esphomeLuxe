@@ -18,7 +18,7 @@ esphome:
     board_build.arduino.memory_type: qio_opi
   project:
     name: raspiaudio.voice-assistant
-    version: "2025.2.6"    
+    version: "2025.3.0"    
   on_boot:
     priority: -100.0
     then:
@@ -34,7 +34,8 @@ external_components:
         
 esp32:
   board: esp-wrover-kit  
-  flash_size: 8MB
+  flash_size: 4MB
+  partitions: luxe_partitions.csv
   framework:
     type: esp-idf
     version: recommended
@@ -55,9 +56,6 @@ micro_wake_word:
       id: hey_jarvis
     - model: hey_mycroft
       id: hey_mycroft
-    - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
-      id: stop
-      internal: true
   on_wake_word_detected:
     - voice_assistant.start:
         wake_word: !lambda return wake_word;
@@ -316,15 +314,7 @@ binary_sensor:
         pullup: true 
     name: Mute
     on_click:       
-      - if:
-          condition:
-               - lambda: 'return(id(mute));'            
-          then:
-              - script.execute: mute_off
-              - lambda: id(mute) = false;
-          else:
-              - script.execute: mute_on
-              - lambda: id(mute) = true;  
+      - script.execute: manual_listen
     on_double_click:
        - if:
            condition: 
@@ -439,6 +429,13 @@ media_player:
             - lambda: |-
                 id(audio_active) = false;
                 id(audio_started) = false;
+    on_play:
+      - if:
+          condition:
+            lambda: 'return !id(mute);'
+          then:
+            - output.turn_off: dac_mute
+            - lambda: id(muteH) = false;
       
 select:
   - platform: template
@@ -545,6 +542,80 @@ script:
            id(my_es8388).write_byte(0x1D, 0x00);
            id(my_es8388).write_byte(0x1C, 0x00);
            id(my_es8388).write_byte(0x04, 0x0C);
+
+  - id: manual_listen
+    then:
+      - logger.log: "Manual listen button pressed"
+      - if:
+          condition:
+            lambda: 'return id(mute);'
+          then:
+            - logger.log: "Manual listen -> unmute and go to waiting"
+            - script.execute: mute_off
+            - voice_assistant.stop:
+            - wait_until:
+                not:
+                  voice_assistant.is_running:
+            - micro_wake_word.start:
+            - lambda: |-
+                 id(audio_active) = false;
+                 id(audio_started) = false;
+                 id(phase) = 1;
+            - script.execute: update_led
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(phase) == 2;'
+                then:
+                  - logger.log: "Manual listen -> mute current playback"
+                  - script.execute: mute_on
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(phase) == 1;'
+                      then:
+                        - logger.log: "Manual listen -> switch waiting to listening"
+                        - voice_assistant.stop:
+                        - wait_until:
+                            not:
+                              voice_assistant.is_running:
+                        - script.execute: mute_off
+                        - microphone.unmute: luxe_mic
+                        - micro_wake_word.stop:
+                        - lambda: |-
+                             id(audio_active) = false;
+                             id(audio_started) = false;
+                             id(phase) = 3;
+                        - script.execute: update_led
+                        - voice_assistant.start:
+                      else:
+                        - if:
+                            condition:
+                              lambda: 'return id(phase) == 3;'
+                            then:
+                              - logger.log: "Manual listen -> switch listening to waiting"
+                              - voice_assistant.stop:
+                              - wait_until:
+                                  not:
+                                    voice_assistant.is_running:
+                              - micro_wake_word.start:
+                              - lambda: |-
+                                   id(audio_active) = false;
+                                   id(audio_started) = false;
+                                   id(phase) = 1;
+                              - script.execute: update_led
+                            else:
+                              - logger.log: "Manual listen -> fallback to waiting"
+                              - voice_assistant.stop:
+                              - wait_until:
+                                  not:
+                                    voice_assistant.is_running:
+                              - micro_wake_word.start:
+                              - lambda: |-
+                                   id(audio_active) = false;
+                                   id(audio_started) = false;
+                                   id(phase) = 1;
+                              - script.execute: update_led
 
 
   - id: update_led
