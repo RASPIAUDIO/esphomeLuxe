@@ -18,7 +18,7 @@ esphome:
     board_build.arduino.memory_type: qio_opi
   project:
     name: raspiaudio.voice-assistant
-    version: "2025.2.6"    
+    version: "2025.3.0"    
   on_boot:
     priority: -100.0
     then:
@@ -34,7 +34,8 @@ external_components:
         
 esp32:
   board: esp-wrover-kit  
-  flash_size: 8MB
+  flash_size: 4MB
+  partitions: luxe_partitions.csv
   framework:
     type: esp-idf
     version: recommended
