@@ -1,0 +1,1092 @@
+# museLuxe: MA/Sendspin + half-duplex Assist; initial button-based release.
+# Standalone YAML; keep components/ and luxe_policy.h beside this file.
+# The existing Luxe Music and Radio configurations are not modified.
+substitutions:
+    startup_sound_file: assets/startup_24k.flac
+    listening_sound_file: assets/listening_24k.flac
+
+esphome:
+  name: muse-luxe
+  friendly_name: Raspiaudio Luxe
+  min_version: 2026.10.1
+  includes:
+    # Copy the local header, and include it before generated global storage.
+    # ESPHome 2026.10 emits sizeof(custom_type) before ordinary local includes.
+    - luxe_policy.h
+    - <luxe_policy.h>
+  name_add_mac_suffix: true
+  on_boot:
+    priority: -100
+    then:
+      # GPIO21 commande la mise en sourdine de l'amplificateur de la Luxe.
+      - output.turn_off: dac_mute
+      # Laisse le mixer terminer une annonce avant la reprise d'un flux MA.
+      - speaker_source.set_playlist_delay:
+          id: external_media_player
+          pipeline: announcement
+          delay: 500ms
+      - speaker_source.set_playlist_delay:
+          id: external_media_player
+          pipeline: media
+          delay: 1500ms
+      - script.execute: update_status
+  project:
+    name: raspiaudio.luxe
+    version: "2026.10.0"
+    
+esp32:
+  variant: esp32
+  flash_size: 4MB
+  partitions: luxe_partitions.csv
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC: n
+      CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
+    advanced:
+      include_builtin_idf_components:
+        - esp_http_client
+      sram1_as_iram: true
+
+logger:
+  level: INFO
+  logs:
+    sensor: WARN
+
+api:
+  reboot_timeout: 0s
+
+wifi:
+#  ssid: 
+#  password: 
+  power_save_mode: none
+#  output_power: 20dB
+  ap:
+    ssid: "Luxe-Setup"
+    password: "12345678"
+    
+
+    
+psram:
+  mode: quad
+  speed: 80MHz
+  
+ota:                 
+  - platform: esphome
+    id: ota_esphome
+# Native ESPHome OTA is enabled; the HTTP firmware updater is not configured.
+# Keep native OTA; omit the unused HTTP updater to fit both standard OTA slots.
+  
+captive_portal:
+
+improv_serial: 
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [luxe_ip5306, luxe_audio_file]
+  # Initialisation spécifique du codec de la museLuxe (sorties différentielles
+  # et horloge MCLK sur GPIO0). Sendspin et la chaîne audio sont désormais natifs.
+  - source:
+      type: git
+      url: https://github.com/RASPIAUDIO/esphomeLuxe
+      ref: 192372ff59b560a74aa547dc26af609918fcc9d6
+    components: [es8388]
+
+i2c:
+  sda: GPIO18
+  scl: GPIO23
+  frequency: 100kHz
+  id: bus_a
+
+es8388:
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: GPIO25
+    i2s_bclk_pin: GPIO5
+    i2s_mclk_pin: GPIO0
+microphone:
+  - platform: i2s_audio
+    id: luxe_mic
+    i2s_audio_id: i2s_audio_bus
+    i2s_din_pin: GPIO35
+    adc_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: stereo
+
+#####################
+# Internal Components
+output:
+  - platform: gpio
+    id: dac_mute
+    pin:
+      number: GPIO21
+      inverted: true
+      mode:
+        output: true
+speaker:
+  - platform: i2s_audio
+    id: box_speaker
+    i2s_audio_id: i2s_audio_bus
+    i2s_dout_pin: GPIO26
+    dac_type: external
+    channel: stereo
+    sample_rate: 48000
+    buffer_duration: 300ms
+    timeout: 500ms
+
+  - platform: mixer
+    id: mixing_speaker
+    output_speaker: box_speaker
+    num_channels: 2
+    source_speakers:
+      - id: announcement_mixer_input
+      - id: media_mixer_input
+      - id: voice_mixer_input
+
+  - platform: resampler
+    id: media_resampling_input
+    output_speaker: media_mixer_input
+    sample_rate: 48000
+
+  - platform: resampler
+    id: announcement_resampling_input
+    output_speaker: announcement_mixer_input    
+    sample_rate: 48000
+
+  - platform: resampler
+    id: voice_resampling_input
+    output_speaker: voice_mixer_input
+    sample_rate: 48000
+
+sendspin:
+  id: sendspin_hub
+
+audio_file:
+  - id: ready_sound
+    file: ${startup_sound_file}
+  - id: listening_sound
+    file: ${listening_sound_file}
+
+media_source:
+  - platform: sendspin
+    id: sendspin_source
+    buffer_size: 1000000  # Keep PSRAM available for voice and wake-word inference.
+  - platform: audio_file
+    id: file_decoder_source
+  - platform: luxe_audio_file
+    id: file_source
+    source: file_decoder_source
+
+media_player:
+  - platform: sendspin
+    id: sendspin_media_player
+    name: Luxe Music Assistant
+    on_state:
+      - script.execute: reconcile_audio
+    volume_increment: 2%
+  - platform: speaker_source
+    name: museLuxe Audio
+    id: external_media_player
+    internal: true
+
+    announcement_pipeline:
+      speaker: announcement_resampling_input
+      sources:
+        - file_source
+      format: FLAC
+      num_channels: 1
+      sample_rate: 48000
+    media_pipeline:
+      speaker: media_resampling_input
+      sources:
+        - sendspin_source
+      format: FLAC
+      num_channels: 2      
+      sample_rate: 48000
+
+    volume_increment: 0.05
+    volume_min: 0.0
+    volume_max: 1.0
+    on_state:
+      - script.execute: reconcile_audio
+
+  - platform: speaker
+    id: voice_player
+    name: Voice Answer
+    buffer_size: 160000
+    volume_initial: 0.35
+    volume_min: 0.0
+    volume_max: 1.0
+    announcement_pipeline:
+      speaker: voice_resampling_input
+      format: WAV
+      sample_rate: 48000
+      num_channels: 1
+    on_announcement:
+      - micro_wake_word.stop: {id: mww}
+      - script.execute: reconcile_audio
+    on_idle:
+      - script.execute: reconcile_audio
+
+script:
+  - id: handle_volume_button
+    mode: queued
+    parameters:
+      bit: int
+      pressed: bool
+    then:
+      - lambda: |-
+          const auto action = id(chord).update(bit, pressed);
+          if (action == luxe::ButtonAction::ASSIST) {
+            if (id(session).active()) id(abort_assist).execute();
+            else { id(wake_phrase).clear(); id(start_assist).execute(); }
+          } else if (action != luxe::ButtonAction::NONE) {
+            const bool up = action == luxe::ButtonAction::UP;
+            if (id(session).active() ||
+                id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING) {
+              auto call = id(voice_player).make_call();
+              call.set_volume(clamp(id(voice_player).volume + (up ? 0.02f : -0.02f), 0.0f, 1.0f));
+              call.perform();
+            } else {
+              auto call = id(sendspin_media_player).make_call();
+              call.set_command(up ? media_player::MEDIA_PLAYER_COMMAND_VOLUME_UP :
+                                    media_player::MEDIA_PLAYER_COMMAND_VOLUME_DOWN);
+              call.perform();
+            }
+          }
+
+  - id: start_assist
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: return !id(ha_ready) || id(microphone_mute).state || id(session).active();
+          then:
+            - logger.log: "Assist unavailable: HA offline, microphone muted or session busy"
+            - script.stop: start_assist
+      - lambda: |-
+          id(session).begin(id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING);
+          // An interaction takes priority over a pending boot cue.
+          id(boot_sound_played) = true;
+      - script.stop: startup_chime
+      - script.execute: session_watchdog
+      - script.execute: update_status
+      - micro_wake_word.stop: {id: mww}
+      - if:
+          condition:
+            lambda: return id(session).return_to_music;
+          then:
+            # Pause the group, not just this Luxe; do not reconnect a live radio
+            # unless the local speaker cannot release its I2S bus normally.
+            - lambda: id(session).pause_sent = true;
+            - media_player.pause: sendspin_media_player
+            - wait_until:
+                condition:
+                  lambda: return id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING;
+                timeout: 8s
+            - if:
+                condition:
+                  lambda: return id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING;
+                then:
+                  - logger.log:
+                      level: WARN
+                      format: "Assist cancelled: MA group did not acknowledge pause"
+                  - script.execute: finish_assist
+                  - script.stop: start_assist
+      - script.wait: play_sound
+      - wait_until:
+          condition:
+            lambda: return id(box_speaker).is_stopped() && id(luxe_mic).is_stopped();
+          timeout: 5s
+      - if:
+          condition:
+            lambda: return !id(box_speaker).is_stopped();
+          then:
+            - lambda: id(session).left_group = id(session).return_to_music;
+            - media_player.stop: external_media_player
+            - media_player.stop:
+                id: external_media_player
+                announcement: true
+            - media_player.stop:
+                id: voice_player
+                announcement: true
+            - wait_until:
+                condition:
+                  lambda: return id(box_speaker).is_stopped() && id(luxe_mic).is_stopped();
+                timeout: 5s
+      - if:
+          condition:
+            lambda: |-
+              return !id(ha_ready) || id(microphone_mute).state ||
+                     !id(box_speaker).is_stopped() || !id(luxe_mic).is_stopped();
+          then:
+            - logger.log:
+                level: WARN
+                format: "Assist cancelled: audio bus not released or HA disconnected"
+            - script.execute: finish_assist
+            - script.stop: start_assist
+      - if:
+          condition:
+            switch.is_on: listening_sound_switch
+          then:
+            - script.execute:
+                id: play_sound
+                sound_file: listening_sound
+            - script.wait: play_sound
+      - if:
+          condition:
+            lambda: |-
+              return !id(ha_ready) || id(microphone_mute).state ||
+                !id(box_speaker).is_stopped() || !id(luxe_mic).is_stopped() ||
+                !id(announcement_resampling_input).is_stopped();
+          then:
+            - logger.log:
+                level: WARN
+                format: "Assist cancelled: audio cue did not release the bus"
+            - script.execute: finish_assist
+            - script.stop: start_assist
+      - logger.log: "Cue handoff: requesting Assist"
+      - voice_assistant.start:
+          id: va
+          silence_detection: true
+          wake_word: !lambda return id(wake_phrase);
+
+  - id: finish_assist
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: return !id(session).active();
+          then:
+            - script.stop: finish_assist
+      - script.stop: silence_watchdog
+      - lambda: id(session).phase = luxe::Phase::FINISHING;
+      # A pipeline end can precede the last decoded TTS sample. Do not resume
+      # MA or re-arm WW until both consumers have released the shared I2S bus.
+      - wait_until:
+          condition:
+            lambda: |-
+              return !id(va).is_running() &&
+                     id(voice_player).state != media_player::MEDIA_PLAYER_STATE_ANNOUNCING &&
+                     (id(box_speaker).is_stopped() ||
+                      id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING) &&
+                     id(luxe_mic).is_stopped();
+          timeout: 120s
+      - if:
+          condition:
+            lambda: |-
+              return id(va).is_running() || !id(luxe_mic).is_stopped() ||
+                id(voice_player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING;
+          then:
+            - logger.log:
+                level: WARN
+                format: "Assist cleanup timed out; stopping voice consumers"
+            - voice_assistant.stop: {id: va}
+            - micro_wake_word.stop: {id: mww}
+            - media_player.stop:
+                id: voice_player
+                announcement: true
+            - wait_until:
+                condition:
+                  lambda: return !id(va).is_running() && id(luxe_mic).is_stopped();
+                timeout: 5s
+      - if:
+          condition:
+            lambda: return !id(luxe_mic).is_stopped() || id(va).is_running();
+          then:
+            # Never resume music against a microphone that still owns I2S.
+            - logger.log:
+                level: ERROR
+                format: "Audio bus still busy: recovery required, MA remains paused"
+            - script.stop: session_watchdog
+            - lambda: id(session).reset();
+            - script.execute: update_status
+            - script.stop: finish_assist
+      - if:
+          condition:
+            lambda: return id(session).should_resume();
+          then:
+            - if:
+                condition:
+                  lambda: return id(session).left_group;
+                then:
+                  - sendspin.switch: sendspin_hub
+                  - delay: 300ms
+            # Restore the actual hardware gain, not just the displayed volume.
+            # Use the current MA endpoint value to respect changes made in HA
+            # during the question, without changing the separate voice setting.
+            - lambda: |-
+                id(box_speaker).set_volume(id(external_media_player).volume);
+                id(box_speaker).set_mute_state(id(external_media_player).is_muted());
+            - media_player.play: sendspin_media_player
+            - wait_until:
+                condition:
+                  lambda: return id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING;
+                timeout: 8s
+            - if:
+                condition:
+                  lambda: return id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING;
+                then:
+                  - logger.log:
+                      level: WARN
+                      format: "MA resume not acknowledged; use Play/Pause to retry"
+      - script.stop: session_watchdog
+      - lambda: |-
+          id(session).reset();
+          id(wake_phrase).clear();
+      - script.execute: reconcile_audio
+
+  - id: abort_assist
+    mode: single
+    then:
+      - script.stop: start_assist
+      - script.stop: startup_chime
+      - script.stop: play_sound
+      - script.stop: silence_watchdog
+      - voice_assistant.stop: {id: va}
+      - micro_wake_word.stop: {id: mww}
+      - media_player.stop:
+          id: voice_player
+          announcement: true
+      - media_player.stop:
+          id: external_media_player
+          announcement: true
+      - script.execute: finish_assist
+
+  - id: silence_watchdog
+    mode: restart
+    then:
+      - delay: 8s
+      - if:
+          condition:
+            lambda: return id(session).phase == luxe::Phase::LISTENING;
+          then:
+            - logger.log: "No speech: returning to previous mode"
+            - script.execute: abort_assist
+
+  - id: session_watchdog
+    mode: restart
+    then:
+      - delay: 180s
+      - if:
+          condition:
+            lambda: return id(session).active();
+          then:
+            - logger.log:
+                level: WARN
+                format: "Assist session timed out"
+            - script.execute: abort_assist
+
+  - id: reconcile_audio
+    mode: single
+    then:
+      - lambda: |-
+          const bool music = id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING ||
+              id(external_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING;
+          const bool local_audio = id(voice_player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING ||
+              id(external_media_player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING ||
+              id(startup_chime).is_running() || id(play_sound).is_running() ||
+              !id(announcement_resampling_input).is_stopped();
+          // An explicit external PLAY during listening/answering takes priority.
+          // Stop capture and do not issue another PLAY when cleanup completes.
+          if (id(session).active() &&
+              id(session).phase != luxe::Phase::PREPARING &&
+              id(session).phase != luxe::Phase::FINISHING &&
+              id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING) {
+            id(session).return_to_music = false;
+            id(abort_assist).execute();
+          }
+          const bool wake = luxe::may_wake(id(ha_ready), id(use_wake_word).state,
+              id(microphone_mute).state, id(session).active(), music, local_audio,
+              id(box_speaker).is_stopped(), id(va).is_running());
+          if (wake) {
+            if (!id(mww).is_running()) id(mww).start();
+          } else if (id(mww).is_running()) {
+            id(mww).stop();
+          }
+          // Mixer sources forward gain/mute to the same physical output.
+          // Keep the active source authoritative even after a UI volume change
+          // on the inactive player. Do not overwrite either player's setting.
+          if (id(voice_player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING) {
+            if (id(box_speaker).get_volume() != id(voice_player).volume)
+              id(box_speaker).set_volume(id(voice_player).volume);
+            if (id(box_speaker).get_mute_state() != id(voice_player).is_muted())
+              id(box_speaker).set_mute_state(id(voice_player).is_muted());
+          } else if (music && !id(session).active()) {
+            if (id(box_speaker).get_volume() != id(external_media_player).volume)
+              id(box_speaker).set_volume(id(external_media_player).volume);
+            if (id(box_speaker).get_mute_state() != id(external_media_player).is_muted())
+              id(box_speaker).set_mute_state(id(external_media_player).is_muted());
+          }
+      - script.execute: update_status
+
+  - id: update_status
+    then:
+      - lambda: |-
+          int status = 0;  // offline: red
+          if (id(session).active()) status = 3 + int(id(session).phase);
+          else if (id(sendspin_media_player).state == media_player::MEDIA_PLAYER_STATE_PLAYING) status = 2;
+          else if (id(microphone_mute).state) status = 10;
+          else if (id(ha_ready) && id(mww).is_running()) status = 1;
+          else if (id(ha_ready)) status = 11;
+          if (status == id(last_status)) return;
+          id(last_status) = status;
+          const char *label = "HA offline";
+          float r=1, g=0, b=0;
+          switch (status) {
+            case 1: label="Wake word ready"; r=0; b=1; break;
+            case 2: label="Music Assistant"; r=0; g=1; break;
+            case 4: label="Preparing Assist"; g=0.5f; break;
+            case 5: label="Listening"; r=0; g=1; b=1; break;
+            case 6: label="Thinking"; b=1; break;
+            case 7: label="Answering"; g=1; break;
+            case 8: label="Returning"; g=0.5f; break;
+            case 10: label="Microphone muted"; b=0.3f; break;
+            case 11: label="Assist ready (button)"; r=0.3f; b=0.3f; break;
+          }
+          id(operation_status).publish_state(label);
+          auto call = id(led).turn_on();
+          call.set_rgb(r,g,b);
+          call.set_brightness(0.6f);
+          call.perform();
+
+  - id: startup_chime
+    mode: single
+    then:
+      - delay: 5s
+      - if:
+          condition:
+            lambda: return !id(boot_sound_played);
+          then:
+            - lambda: id(boot_sound_played) = true;
+            - if:
+                condition:
+                  lambda: |-
+                    return id(ha_ready) && id(startup_sound_switch).state && !id(session).active() &&
+                      id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING;
+                then:
+                  - micro_wake_word.stop: {id: mww}
+                  - wait_until:
+                      condition:
+                        lambda: return id(luxe_mic).is_stopped();
+                      timeout: 3s
+                  - if:
+                      condition:
+                        lambda: |-
+                          return id(ha_ready) && id(luxe_mic).is_stopped() && !id(session).active() &&
+                            id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING;
+                      then:
+                        - script.execute:
+                            id: play_sound
+                            sound_file: ready_sound
+                        - script.wait: play_sound
+
+  - id: update_battery_led
+    mode: queued
+    max_runs: 2
+    then:
+      - lambda: |-
+          const bool critical = id(battery_critical).state;
+          if (critical && (!id(led).remote_values.is_on() || id(led).get_effect_name() != "Battery alert")) {
+            auto call = id(led).turn_on();
+            call.set_effect("Battery alert");
+            call.set_brightness(1.0f);
+            call.perform();
+          } else if (!critical && id(led).get_effect_name() == "Battery alert") {
+            auto call = id(led).turn_on();
+            call.set_effect("None");
+            call.perform();
+          }
+  - id: play_sound
+    mode: single
+    parameters:
+      sound_file: string
+    then:
+      # Keep this script running from before queueing playback until the final
+      # audio buffers drain. Player state alone has a gap while PLAY is queued.
+      - micro_wake_word.stop: {id: mww}
+      - delay: 50ms
+      - micro_wake_word.stop: {id: mww}
+      - wait_until:
+          condition:
+            lambda: |-
+              return !id(mww).is_running() && id(luxe_mic).is_stopped() &&
+                id(box_speaker).is_stopped();
+          timeout: 5s
+      - if:
+          condition:
+            lambda: |-
+              return id(mww).is_running() || !id(luxe_mic).is_stopped() ||
+                !id(box_speaker).is_stopped() || id(va).is_running();
+          then:
+            - logger.log:
+                level: WARN
+                format: "Audio cue skipped: audio bus is busy"
+            - script.stop: play_sound
+      - lambda: |-
+          id(box_speaker).set_volume(id(voice_player).volume);
+          id(box_speaker).set_mute_state(id(voice_player).is_muted());
+          ESP_LOGI("ui_sound", "Playing %s", sound_file.c_str());
+          id(external_media_player).make_call()
+            .set_media_url("audio-file://" + sound_file)
+            .set_announcement(true).perform();
+      - wait_until:
+          condition:
+            lambda: |-
+              return id(external_media_player).state == media_player::MEDIA_PLAYER_STATE_ANNOUNCING;
+          timeout: 2s
+      - if:
+          condition:
+            lambda: |-
+              return id(external_media_player).state != media_player::MEDIA_PLAYER_STATE_ANNOUNCING;
+          then:
+            - logger.log:
+                level: WARN
+                format: "Audio cue did not start; cancelling queued playback"
+            - media_player.stop:
+                id: external_media_player
+                announcement: true
+            - delay: 100ms
+      - wait_until:
+          condition:
+            lambda: |-
+              return id(file_source).get_state() == media_source::MediaSourceState::IDLE &&
+                id(external_media_player).state != media_player::MEDIA_PLAYER_STATE_ANNOUNCING &&
+                id(announcement_resampling_input).is_stopped();
+          timeout: 7s
+      # The announcement source stops only once its pending playback frames
+      # have been acknowledged. Release the physical output gracefully now,
+      # instead of waiting for its general-purpose 500 ms inactivity timeout.
+      # Never use stop(): it could discard audio still in the DMA pipeline.
+      - if:
+          condition:
+            lambda: |-
+              return id(file_source).get_state() == media_source::MediaSourceState::IDLE &&
+                id(announcement_resampling_input).is_stopped() &&
+                id(announcement_mixer_input).is_stopped() &&
+                id(media_resampling_input).is_stopped() && id(voice_resampling_input).is_stopped();
+          then:
+            - lambda: |-
+                ESP_LOGI("ui_sound", "Cue drained; releasing speaker");
+                id(box_speaker).finish();
+      - wait_until:
+          condition:
+            lambda: return id(box_speaker).is_stopped();
+          timeout: 2s
+      - logger.log: "Cue handoff: speaker drain wait completed"
+      - if:
+          condition:
+            lambda: |-
+              return id(file_source).get_state() != media_source::MediaSourceState::IDLE ||
+                !id(announcement_resampling_input).is_stopped() || !id(box_speaker).is_stopped();
+          then:
+            - logger.log:
+                level: WARN
+                format: "Audio cue timed out; stopping announcement"
+            - media_player.stop:
+                id: external_media_player
+                announcement: true
+            - wait_until:
+                condition:
+                  lambda: |-
+                    return id(file_source).get_state() == media_source::MediaSourceState::IDLE &&
+                      id(announcement_resampling_input).is_stopped() && id(box_speaker).is_stopped();
+                timeout: 3s
+  - id: led_red
+    then:
+      - light.turn_on:
+          id: led
+          red: 100%
+          green: 0%
+          blue: 0%
+          brightness: 100%
+
+  - id: led_green
+    then:
+      - light.turn_on:
+          id: led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 100%
+
+switch:
+  - platform: template
+    name: Use wake word
+    id: use_wake_word
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: reconcile_audio
+    on_turn_off:
+      - micro_wake_word.stop: {id: mww}
+      - script.execute: update_status
+  - platform: template
+    name: Microphone Mute
+    id: microphone_mute
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - microphone.mute: luxe_mic
+      - micro_wake_word.stop: {id: mww}
+      - if:
+          condition:
+            lambda: return id(session).active();
+          then:
+            - script.execute: abort_assist
+      - script.execute: update_status
+    turn_off_action:
+      - microphone.unmute: luxe_mic
+      - script.execute: reconcile_audio
+  - platform: template
+    name: Listening sound
+    id: listening_sound_switch
+    entity_category: config
+    icon: mdi:volume-high
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: ip5306_charge_switch
+    name: "Allow charging"
+    entity_category: config
+    icon: mdi:battery-charging
+    restore_mode: DISABLED
+    optimistic: false
+    lambda: return id(battery_manager).charge_enabled();
+    turn_on_action:
+      - lambda: id(battery_manager).set_charge_enabled(true);
+    turn_off_action:
+      - lambda: id(battery_manager).set_charge_enabled(false);
+  - platform: template
+    id: startup_sound_switch
+    name: Startup sound
+    icon: "mdi:card-text-outline"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+globals:
+  - id: session
+    type: luxe::Session
+  - id: chord
+    type: luxe::ButtonChord
+  - id: ha_ready
+    type: bool
+    initial_value: 'false'
+  - id: last_status
+    type: int
+    initial_value: '-1'
+  - id: wake_phrase
+    type: std::string
+  - id: boot_sound_played
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+binary_sensor:
+  - platform: template
+    id: battery_critical
+    name: Battery low
+    device_class: battery
+    entity_category: diagnostic
+    lambda: |-
+      if (!id(battery_percent).has_state() || !std::isfinite(id(battery_percent).state)) return {};
+      const float percent = id(battery_percent).state;
+      const float threshold = id(battery_alert_threshold).state;
+      if (percent < threshold) return true;
+      if (percent >= threshold + 5.0f) return false;
+      return {};
+    on_state:
+      - script.execute: update_battery_led
+  - platform: gpio
+    id: play_button
+    pin:
+      number: GPIO12
+      inverted: true
+      mode: INPUT_PULLUP
+    name: Play or Pause
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - if:
+          condition:
+            lambda: return id(session).active();
+          then:
+            - script.execute: abort_assist
+          else:
+            - media_player.toggle: sendspin_media_player
+
+  - platform: gpio
+    id: volume_up_button
+    pin:
+      number: GPIO19
+      inverted: true
+      mode: INPUT_PULLUP
+    name: Volume Up
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - script.execute:
+          id: handle_volume_button
+          bit: 1
+          pressed: true
+    on_release:
+      - script.execute:
+          id: handle_volume_button
+          bit: 1
+          pressed: false
+
+  - platform: gpio
+    id: volume_down_button
+    pin:
+      number: GPIO32
+      inverted: true
+      mode: INPUT_PULLUP
+    name: Volume Down
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - script.execute:
+          id: handle_volume_button
+          bit: 2
+          pressed: true
+    on_release:
+      - script.execute:
+          id: handle_volume_button
+          bit: 2
+          pressed: false
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: led
+    name: LED light
+    disabled_by_default: false
+    entity_category: config
+    pin: GPIO22
+    default_transition_length: 0s
+    chipset: WS2812
+    num_leds: 1
+    channel_colors: GRB
+    # Conserve l'alerte après une commande HA ou un changement lecture/arrêt.
+    on_state:
+      - script.execute: update_battery_led
+    effects:
+      - addressable_lambda:
+          name: "Battery alert"
+          update_interval: 500ms
+          lambda: |-
+            static bool lit = false;
+            if (initial_run) lit = false;
+            lit = !lit;
+            it.all() = lit ? current_color : Color::BLACK;
+      - pulse:
+          name: "Slow Pulse"
+          transition_length: 250ms
+          update_interval: 250ms
+          min_brightness: 50%
+          max_brightness: 100%
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 100ms
+          update_interval: 100ms
+          min_brightness: 50%
+          max_brightness: 100%
+
+sensor:
+ - platform: adc
+   pin: GPIO33
+   id: battery_voltage
+   name: Battery voltage
+   icon: "mdi:battery-outline"
+   update_interval: 15s
+   accuracy_decimals: 3
+   attenuation: 12db
+   raw: true
+   filters:
+    - multiply: 0.00173913 # 2300 -> 4, for attenuation 11db, based on Olivier's code
+    - exponential_moving_average:
+        alpha: 0.2
+        send_every: 2
+    - delta: 0.002
+   on_value:
+     - sensor.template.publish:
+         id: battery_percent
+         state: !lambda return x;
+ - platform: template
+   id: battery_percent
+   name: Battery level
+   device_class: battery
+   unit_of_measurement: "%"
+   accuracy_decimals: 0
+   state_class: measurement
+   entity_category: diagnostic
+   update_interval: never
+   # Même estimation tension/charge que la Radio, après calibration Luxe.
+   filters:
+     - calibrate_polynomial:
+         degree: 3
+         datapoints:
+           - 4.20 -> 100.0
+           - 4.13 -> 97.1
+           - 4.10 -> 94.2
+           - 4.07 -> 88.4
+           - 4.05 -> 82.7
+           - 4.04 -> 76.9
+           - 4.04 -> 71.1
+           - 4.01 -> 65.3
+           - 3.99 -> 59.5
+           - 3.95 -> 53.8
+           - 3.93 -> 48.0
+           - 3.91 -> 42.2
+           - 3.88 -> 36.4
+           - 3.86 -> 30.6
+           - 3.84 -> 24.9
+           - 3.82 -> 19.1
+           - 3.76 -> 13.3
+           - 3.73 -> 10.4
+           - 3.70 -> 7.5
+           - 3.64 -> 4.6
+           - 3.50 -> 1.7
+           - 3.00 -> 0.0
+     - lambda: return clamp(x, 0.0f, 100.0f);
+ - platform: wifi_signal
+   name: "museLuxe WiFi signal"
+   update_interval: 10s    
+
+# Paramètre logiciel : conserve une hystérésis fixe de 5 points.
+number:
+  - platform: template
+    id: battery_alert_threshold
+    name: "Low battery threshold"
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 5
+    max_value: 50
+    step: 1
+    initial_value: 20
+    restore_value: true
+    optimistic: true
+    mode: box
+
+luxe_ip5306:
+  id: battery_manager
+  i2c_id: bus_a
+  address: 0x75
+  update_interval: 10s
+  available:
+    name: "IP5306 available"
+    id: ip5306_available
+  charging:
+    name: "Charging"
+  full:
+    name: "Battery full"
+  charge_allowed:
+    name: "Charging enabled (hardware)"
+  level:
+    name: "IP5306 battery level"
+  current_limit:
+    name: "IP5306 charge current limit"
+
+micro_wake_word:
+  id: mww
+  microphone:
+    microphone: luxe_mic
+    channels: [0]
+  stop_after_detection: true
+  models:
+    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
+      id: okay_nabu
+  on_wake_word_detected:
+    - if:
+        condition:
+          lambda: |-
+            return id(ha_ready) && !id(session).active() && !id(microphone_mute).state &&
+              id(use_wake_word).state &&
+              !id(startup_chime).is_running() && !id(play_sound).is_running() &&
+              id(sendspin_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING &&
+              id(external_media_player).state != media_player::MEDIA_PLAYER_STATE_PLAYING;
+        then:
+          - lambda: id(wake_phrase) = wake_word;
+          - script.execute: start_assist
+
+voice_assistant:
+  id: va
+  microphone:
+    microphone: luxe_mic
+    channels: [0]
+  media_player: voice_player
+  micro_wake_word: mww
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  on_client_connected:
+    - lambda: id(ha_ready) = true;
+    - script.execute: startup_chime
+    - script.execute: reconcile_audio
+  on_client_disconnected:
+    - lambda: id(ha_ready) = false;
+    - micro_wake_word.stop: {id: mww}
+    - if:
+        condition:
+          lambda: return id(session).active();
+        then:
+          - script.execute: abort_assist
+    - script.execute: update_status
+  on_start:
+    - lambda: |-
+        // Also track a pipeline initiated from HA while the device is idle.
+        if (!id(session).active()) id(session).begin(false);
+    - micro_wake_word.stop: {id: mww}
+    - script.execute: session_watchdog
+  on_listening:
+    - logger.log: "Cue handoff: Assist listening"
+    - lambda: id(session).phase = luxe::Phase::LISTENING;
+    - script.execute: silence_watchdog
+    - script.execute: update_status
+  on_stt_vad_start:
+    - script.stop: silence_watchdog
+  on_stt_end:
+    - script.stop: silence_watchdog
+    - lambda: id(session).phase = luxe::Phase::THINKING;
+    - script.execute: update_status
+  on_tts_start:
+    - lambda: |-
+        id(session).phase = luxe::Phase::ANSWERING;
+        id(box_speaker).set_volume(id(voice_player).volume);
+        id(box_speaker).set_mute_state(id(voice_player).is_muted());
+    - script.execute: update_status
+  on_end:
+    - script.execute: finish_assist
+  on_error:
+    - logger.log:
+        level: WARN
+        format: "Assist error: %s"
+        args: ['code.c_str()']
+    - script.execute: abort_assist
+
+interval:
+  - interval: 250ms
+    then:
+      - script.execute: reconcile_audio
+
+text_sensor:
+  - platform: template
+    id: operation_status
+    name: Operating mode
+    update_interval: never
+
+button:
+  - platform: template
+    name: Assist
+    on_press:
+      - lambda: |-
+          if (id(session).active()) id(abort_assist).execute();
+          else { id(wake_phrase).clear(); id(start_assist).execute(); }
+
